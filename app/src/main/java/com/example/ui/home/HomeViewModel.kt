@@ -31,6 +31,7 @@ sealed interface AppScreen {
     data object Home : AppScreen
     data object Search : AppScreen
     data object Downloads : AppScreen
+    data object WatchHistory : AppScreen
     data class Genre(
         val section: CategorySection,
         val isShortsPage: Boolean = false,
@@ -42,11 +43,13 @@ sealed interface AppScreen {
         val isFromShortsPage: Boolean = false,
         val isDownloaded: Boolean = false,
         val downloadedSeason: Int = 0,
-        val downloadedEpisode: Int = 0
+        val downloadedEpisode: Int = 0,
+        val initialSeekMs: Long = 0L
     ) : AppScreen
     data class Shorts(
         val movie: MovieItem,
-        val playlist: List<MovieItem> = emptyList()
+        val playlist: List<MovieItem> = emptyList(),
+        val initialEpisode: Int = 1
     ) : AppScreen
 }
 
@@ -129,6 +132,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private var isMovieBoxSearchLoadingNextPage = false
 
     init {
+        com.example.data.repository.WatchHistoryManager.init(application)
+        com.example.data.repository.RecentSearchesManager.init(application)
         loadData()
     }
 
@@ -737,6 +742,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         val q = (query ?: _uiState.value.searchQuery).trim()
         if (q.isBlank()) return
 
+        com.example.data.repository.RecentSearchesManager.addSearchQuery(_uiState.value.activeServer, q)
+
         suggestJob?.cancel()
         searchJob?.cancel()
 
@@ -1037,6 +1044,83 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun openWatchHistory() {
+        _uiState.update {
+            it.copy(
+                screenStack = it.screenStack + AppScreen.WatchHistory
+            )
+        }
+    }
+
+    fun clearRecentSearches() {
+        com.example.data.repository.RecentSearchesManager.clearRecentSearches(_uiState.value.activeServer)
+    }
+
+    fun removeRecentSearch(query: String) {
+        com.example.data.repository.RecentSearchesManager.removeSearchQuery(_uiState.value.activeServer, query)
+    }
+
+    fun playHistoryItem(item: com.example.data.model.WatchHistoryItem) {
+        val isStorySource = item.source.equals("storytv", ignoreCase = true)
+        val isFreeReelsSource = item.source.equals("freereels", ignoreCase = true)
+        val isVskitSource = item.source.equals("vskit", ignoreCase = true)
+        val shouldPlayInShorts = item.isShortsPlayer ||
+            item.subjectType == 7 ||
+            isVskitSource ||
+            isStorySource ||
+            isFreeReelsSource ||
+            (item.isSeries && item.season == 0 && item.episode > 0)
+
+        val resolvedSubjectType = when {
+            shouldPlayInShorts && item.subjectType <= 1 -> 7
+            item.isSeries && !shouldPlayInShorts && item.subjectType <= 1 -> 2
+            else -> item.subjectType
+        }
+
+        val movie = MovieItem(
+            id = item.movieId,
+            title = item.title,
+            description = item.genre,
+            coverUrl = item.coverUrl,
+            backdropUrl = item.backdropUrl,
+            rating = "",
+            genre = item.genre,
+            releaseDate = "",
+            releaseYear = "",
+            country = "",
+            corner = "",
+            detailPath = item.detailPath,
+            isShort = shouldPlayInShorts,
+            subjectType = resolvedSubjectType,
+            source = item.source,
+            isSeries = item.isSeries,
+            isVskitServer = isVskitSource,
+            isStoryTvServer = isStorySource,
+            isFreeReelsServer = isFreeReelsSource
+        )
+
+        if (shouldPlayInShorts) {
+            val targetEp = if (item.episode > 0) item.episode else 1
+            openShortsPlayer(movie, initialEpisode = targetEp)
+        } else {
+            _uiState.update {
+                it.copy(
+                    selectedMovie = movie,
+                    playingMovie = movie,
+                    screenStack = it.screenStack + AppScreen.MovieDetail(
+                        movie = movie,
+                        playlist = emptyList(),
+                        isFromShortsPage = false,
+                        isDownloaded = false,
+                        downloadedSeason = if (item.isSeries) item.season.coerceAtLeast(1) else 0,
+                        downloadedEpisode = if (item.isSeries) item.episode.coerceAtLeast(1) else 0,
+                        initialSeekMs = item.lastPositionMs
+                    )
+                )
+            }
+        }
+    }
+
     fun playOfflineMovie(downloadItem: DownloadItem) {
         val movie = MovieItem(
             id = downloadItem.movieId,
@@ -1183,12 +1267,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun openShortsPlayer(
         movie: MovieItem,
-        playlist: List<MovieItem> = emptyList()
+        playlist: List<MovieItem> = emptyList(),
+        initialEpisode: Int = 1
     ) {
         _uiState.update {
             it.copy(
                 selectedMovie = movie,
-                screenStack = it.screenStack + AppScreen.Shorts(movie, playlist)
+                screenStack = it.screenStack + AppScreen.Shorts(movie, playlist, initialEpisode = initialEpisode)
             )
         }
     }

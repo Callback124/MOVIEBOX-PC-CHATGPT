@@ -166,6 +166,7 @@ fun JioSaavnServerView(
                 }
             }
             MediaType.ARTIST -> {
+                selectedMediaItem = null
                 selectedArtist = SaavnArtistItem(id = item.id, name = item.title, image = item.imageUrl)
                 isArtistLoading = true
                 coroutineScope.launch {
@@ -176,45 +177,51 @@ fun JioSaavnServerView(
         }
     }
 
-    if (activeSearchQuery != null) {
-        JioSaavnSearchScreen(
-            initialQuery = activeSearchQuery,
-            onBackClick = { activeSearchQuery = null },
-            modifier = modifier
-        )
-    } else if (selectedArtist != null) {
-        TopArtistDetailView(
-            artist = selectedArtist!!,
-            artistDiscography = artistDiscography,
-            isLoading = isArtistLoading,
-            onBackClick = { selectedArtist = null },
-            onPlaySong = { song, queue ->
-                playerManager.playSong(song, queue)
-                playerManager.openPlayer()
-            },
-            onAlbumClick = { album ->
-                val mItem = MediaItem(
-                    id = album.id,
-                    title = album.title,
-                    subtitle = album.subtitle,
-                    imageUrl = album.image,
-                    type = MediaType.ALBUM
-                )
-                onMediaItemClick(mItem)
-            },
-            onSongOptions = { song ->
-                selectedSongOptions = song
-            },
-            downloadManager = downloadManager,
-            currentBitrate = playerManager.currentBitrate.value,
-            modifier = modifier
-        )
-    } else {
-        Box(
-            modifier = modifier
-                .fillMaxSize()
-                .background(DarkBackground)
-        ) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(DarkBackground)
+    ) {
+        if (activeSearchQuery != null) {
+            JioSaavnSearchScreen(
+                initialQuery = activeSearchQuery,
+                onBackClick = { activeSearchQuery = null },
+                modifier = Modifier.fillMaxSize()
+            )
+        } else if (selectedArtist != null) {
+            TopArtistDetailView(
+                artist = selectedArtist!!,
+                artistDiscography = artistDiscography,
+                isLoading = isArtistLoading,
+                onBackClick = {
+                    selectedArtist = null
+                    selectedMediaItem = null
+                },
+                onPlaySong = { song, queue ->
+                    playerManager.playSong(song, queue)
+                    playerManager.openPlayer()
+                },
+                onAlbumClick = { album ->
+                    val mItem = MediaItem(
+                        id = album.id,
+                        title = album.title,
+                        subtitle = album.subtitle,
+                        imageUrl = album.image,
+                        type = MediaType.ALBUM
+                    )
+                    onMediaItemClick(mItem)
+                },
+                onSongOptions = { song ->
+                    selectedSongOptions = song
+                },
+                downloadManager = downloadManager,
+                currentBitrate = playerManager.currentBitrate.value,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            Box(
+                modifier = Modifier.fillMaxSize()
+            ) {
             if (isLoadingFeed) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -458,6 +465,8 @@ fun JioSaavnServerView(
                     }
                 }
             }
+        }
+    }
 
         // =========================================================================
         // 3-DOTS OPTIONS BOTTOM SHEET
@@ -774,7 +783,6 @@ fun JioSaavnServerView(
             }
         }
     }
-}
 }
 
 @Composable

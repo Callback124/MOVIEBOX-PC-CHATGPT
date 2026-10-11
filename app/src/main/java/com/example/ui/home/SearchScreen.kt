@@ -41,6 +41,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.ui.window.Dialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -92,6 +97,9 @@ fun SearchScreen(
     onBackClick: () -> Unit,
     onMovieClick: (MovieItem) -> Unit,
     onLoadMore: () -> Unit = {},
+    recentSearches: List<String> = emptyList(),
+    onSelectRecentSearch: (String) -> Unit = {},
+    onClearRecentSearches: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     BackHandler(onBack = onBackClick)
@@ -99,6 +107,7 @@ fun SearchScreen(
     val focusManager = LocalFocusManager.current
     val focusRequester = remember { FocusRequester() }
     val gridState = rememberLazyGridState()
+    var showClearRecentDialog by remember { mutableStateOf(false) }
 
     val filteredResults = searchResults
 
@@ -464,30 +473,171 @@ fun SearchScreen(
                     }
                 }
             } else {
-                // Clean initial empty state (Popular genres and tag suggestions removed as requested)
-                Box(
+                if (recentSearches.isNotEmpty()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp, vertical = 14.dp)
+                    ) {
+                        // Recent Searches Header (Screenshot 2)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Recent",
+                                color = Color.White,
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable { showClearRecentDialog = true }
+                                    .padding(horizontal = 6.dp, vertical = 4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.DeleteOutline,
+                                    contentDescription = "Clear",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Clear",
+                                    color = Color.White,
+                                    fontSize = 14.5.sp,
+                                    fontWeight = FontWeight.Normal
+                                )
+                            }
+                        }
+
+                        // Recent Searches Chips (Screenshot 2)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            recentSearches.forEach { query ->
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0xFF27272A),
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable {
+                                            focusManager.clearFocus()
+                                            onSelectRecentSearch(query)
+                                        }
+                                ) {
+                                    Text(
+                                        text = query,
+                                        color = Color.White,
+                                        fontSize = 13.5.sp,
+                                        fontWeight = FontWeight.Normal,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Clean initial empty state
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = null,
+                                tint = Color(0xFF3F3F46),
+                                modifier = Modifier.size(52.dp)
+                            )
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Text(
+                                text = "Search for movies, series, or anime",
+                                color = Color(0xFF71717A),
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Dialog: Clear all recent searches (Screenshot 3)
+        if (showClearRecentDialog) {
+            Dialog(onDismissRequest = { showClearRecentDialog = false }) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = Color(0xFF27272A),
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(32.dp),
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
                 ) {
                     Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = null,
-                            tint = Color(0xFF3F3F46),
-                            modifier = Modifier.size(52.dp)
-                        )
-                        Spacer(modifier = Modifier.height(14.dp))
                         Text(
-                            text = "Search for movies, series, or anime",
-                            color = Color(0xFF71717A),
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium
+                            text = "Clear all recent searches?",
+                            color = Color.White,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
                         )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Text(
+                            text = "This can't be undone and you'll remove all your recent searches.",
+                            color = Color(0xFFA1A1AA),
+                            fontSize = 14.sp,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 20.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(24.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Button(
+                                onClick = { showClearRecentDialog = false },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3F3F46)),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(text = "Cancel", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                            }
+
+                            Button(
+                                onClick = {
+                                    showClearRecentDialog = false
+                                    onClearRecentSearches()
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3F3F46)),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(text = "Clear", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
                     }
                 }
             }

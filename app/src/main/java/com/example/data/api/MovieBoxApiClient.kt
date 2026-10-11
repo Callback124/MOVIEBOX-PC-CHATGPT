@@ -72,10 +72,7 @@ object MovieBoxApiClient {
         if (currentToken.isNotBlank() && (now - tokenLastUpdatedTime) < 30 * 60 * 1000L) {
             return@withContext currentToken
         }
-        val client = OkHttpClient.Builder()
-            .connectTimeout(8, TimeUnit.SECONDS)
-            .readTimeout(10, TimeUnit.SECONDS)
-            .build()
+        val client = getPlayClient()
 
         // 1. Try search-suggest endpoint (returns fresh x-user token header immediately)
         try {
@@ -87,15 +84,16 @@ object MovieBoxApiClient {
                 .header("Referer", REFERER)
                 .post("{\"keyword\":\"a\"}".toRequestBody("application/json; charset=utf-8".toMediaType()))
                 .build()
-            val resp = client.newCall(suggestReq).execute()
-            val xUser = resp.header("x-user")
-            if (!xUser.isNullOrBlank()) {
-                val token = JSONObject(xUser).optString("token")
-                if (token.isNotBlank()) {
-                    cachedSessionToken = token
-                    tokenLastUpdatedTime = System.currentTimeMillis()
-                    Log.d(TAG, "Successfully renewed MovieBox session token from search-suggest")
-                    return@withContext token
+            client.newCall(suggestReq).execute().use { resp ->
+                val xUser = resp.header("x-user")
+                if (!xUser.isNullOrBlank()) {
+                    val token = JSONObject(xUser).optString("token")
+                    if (token.isNotBlank()) {
+                        cachedSessionToken = token
+                        tokenLastUpdatedTime = System.currentTimeMillis()
+                        Log.d(TAG, "Successfully renewed MovieBox session token from search-suggest")
+                        return@withContext token
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -111,15 +109,16 @@ object MovieBoxApiClient {
                 .header("Referer", REFERER)
                 .get()
                 .build()
-            val resp = client.newCall(homeReq).execute()
-            val xUser = resp.header("x-user")
-            if (!xUser.isNullOrBlank()) {
-                val token = JSONObject(xUser).optString("token")
-                if (token.isNotBlank()) {
-                    cachedSessionToken = token
-                    tokenLastUpdatedTime = System.currentTimeMillis()
-                    Log.d(TAG, "Successfully renewed MovieBox session token from home")
-                    return@withContext token
+            client.newCall(homeReq).execute().use { resp ->
+                val xUser = resp.header("x-user")
+                if (!xUser.isNullOrBlank()) {
+                    val token = JSONObject(xUser).optString("token")
+                    if (token.isNotBlank()) {
+                        cachedSessionToken = token
+                        tokenLastUpdatedTime = System.currentTimeMillis()
+                        Log.d(TAG, "Successfully renewed MovieBox session token from home")
+                        return@withContext token
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -219,18 +218,19 @@ object MovieBoxApiClient {
                     .get()
                     .build()
 
-                val response = client.newCall(request).execute()
-                if (response.isSuccessful) {
-                    val jsonString = response.body?.string()
-                    if (!jsonString.isNullOrBlank()) {
-                        val parsed = parseHomeFeedJson(jsonString)
-                        if (parsed.sections.isNotEmpty() || parsed.heroBanners.isNotEmpty()) {
-                            Log.d(TAG, "Successfully loaded live home feed from $apiUrl with ${parsed.sections.size} sections")
-                            return@withContext parsed
+                client.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        val jsonString = response.body?.string()
+                        if (!jsonString.isNullOrBlank()) {
+                            val parsed = parseHomeFeedJson(jsonString)
+                            if (parsed.sections.isNotEmpty() || parsed.heroBanners.isNotEmpty()) {
+                                Log.d(TAG, "Successfully loaded live home feed from $apiUrl with ${parsed.sections.size} sections")
+                                return@withContext parsed
+                            }
                         }
                     }
+                    Log.w(TAG, "Network response unsuccessful from $apiUrl code: ${response.code}")
                 }
-                Log.w(TAG, "Network response unsuccessful from $apiUrl code: ${response.code}")
             } catch (e: Exception) {
                 Log.e(TAG, "Network error fetching feed from $apiUrl", e)
             }
@@ -585,23 +585,24 @@ object MovieBoxApiClient {
                 .post(body)
                 .build()
 
-            val response = client.newCall(request).execute()
-            if (response.isSuccessful) {
-                val jsonStr = response.body?.string()
-                if (!jsonStr.isNullOrBlank()) {
-                    val root = JSONObject(jsonStr)
-                    val dataObj = root.optJSONObject("data")
-                    val itemsArray = dataObj?.optJSONArray("items")
-                    if (itemsArray != null) {
-                        val list = mutableListOf<String>()
-                        for (i in 0 until itemsArray.length()) {
-                            val itm = itemsArray.optJSONObject(i) ?: continue
-                            val word = itm.optString("word").trim()
-                            if (word.isNotBlank() && !list.contains(word)) {
-                                list.add(word)
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val jsonStr = response.body?.string()
+                    if (!jsonStr.isNullOrBlank()) {
+                        val root = JSONObject(jsonStr)
+                        val dataObj = root.optJSONObject("data")
+                        val itemsArray = dataObj?.optJSONArray("items")
+                        if (itemsArray != null) {
+                            val list = mutableListOf<String>()
+                            for (i in 0 until itemsArray.length()) {
+                                val itm = itemsArray.optJSONObject(i) ?: continue
+                                val word = itm.optString("word").trim()
+                                if (word.isNotBlank() && !list.contains(word)) {
+                                    list.add(word)
+                                }
                             }
+                            return@withContext list
                         }
-                        return@withContext list
                     }
                 }
             }
@@ -622,17 +623,18 @@ object MovieBoxApiClient {
             val client = getClient(context)
             val url = "$RANKING_CONTENT_URL?id=$genreTopId&page=$page&perPage=$perPage"
             val request = Request.Builder().url(url).get().build()
-            val response = client.newCall(request).execute()
-            if (response.isSuccessful) {
-                val jsonStr = response.body?.string()
-                if (!jsonStr.isNullOrBlank()) {
-                    val root = JSONObject(jsonStr)
-                    val dataObj = root.optJSONObject("data") ?: return@withContext Pair(emptyList(), false)
-                    val subjectList = dataObj.optJSONArray("subjectList") ?: JSONArray()
-                    val movies = parseSubjectArray(subjectList, isShortCategory = false)
-                    val pager = dataObj.optJSONObject("pager")
-                    val hasMore = pager?.optBoolean("hasMore", false) ?: (movies.size >= perPage)
-                    return@withContext Pair(movies, hasMore)
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val jsonStr = response.body?.string()
+                    if (!jsonStr.isNullOrBlank()) {
+                        val root = JSONObject(jsonStr)
+                        val dataObj = root.optJSONObject("data") ?: return@withContext Pair(emptyList(), false)
+                        val subjectList = dataObj.optJSONArray("subjectList") ?: JSONArray()
+                        val movies = parseSubjectArray(subjectList, isShortCategory = false)
+                        val pager = dataObj.optJSONObject("pager")
+                        val hasMore = pager?.optBoolean("hasMore", false) ?: (movies.size >= perPage)
+                        return@withContext Pair(movies, hasMore)
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -664,40 +666,40 @@ object MovieBoxApiClient {
 
                 val body = jsonBody.toRequestBody("application/json; charset=utf-8".toMediaType())
                 val request = Request.Builder().url(SEARCH_URL).post(body).build()
-                val response = client.newCall(request).execute()
-
-                if (response.isSuccessful) {
-                    val jsonStr = response.body?.string()
-                    if (!jsonStr.isNullOrBlank()) {
-                        val root = JSONObject(jsonStr)
-                        val code = root.optInt("code", 0)
-                        if (code == 0) {
-                            val dataObj = root.optJSONObject("data")
-                            val itemsArray = dataObj?.optJSONArray("items") ?: JSONArray()
-                            val pagerObj = dataObj?.optJSONObject("pager")
-                            val hasMore = pagerObj?.optBoolean("hasMore", false) ?: false
-                            val list = mutableListOf<MovieItem>()
-                            for (i in 0 until itemsArray.length()) {
-                                val sObj = itemsArray.optJSONObject(i) ?: continue
-                                val movie = parseMovieItem(sObj, isShort = false)
-                                if (movie.title.isNotBlank()) {
-                                    list.add(movie)
+                client.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        val jsonStr = response.body?.string()
+                        if (!jsonStr.isNullOrBlank()) {
+                            val root = JSONObject(jsonStr)
+                            val code = root.optInt("code", 0)
+                            if (code == 0) {
+                                val dataObj = root.optJSONObject("data")
+                                val itemsArray = dataObj?.optJSONArray("items") ?: JSONArray()
+                                val pagerObj = dataObj?.optJSONObject("pager")
+                                val hasMore = pagerObj?.optBoolean("hasMore", false) ?: false
+                                val list = mutableListOf<MovieItem>()
+                                for (i in 0 until itemsArray.length()) {
+                                    val sObj = itemsArray.optJSONObject(i) ?: continue
+                                    val movie = parseMovieItem(sObj, isShort = false)
+                                    if (movie.title.isNotBlank()) {
+                                        list.add(movie)
+                                    }
                                 }
+                                return@withContext Pair(list, hasMore)
+                            } else if (attempt == 0) {
+                                // Token might have expired, invalidate and retry
+                                cachedSessionToken = ""
+                                tokenLastUpdatedTime = 0L
+                                getOrFetchFreshToken(context)
+                                return@use
                             }
-                            return@withContext Pair(list, hasMore)
-                        } else if (attempt == 0) {
-                            // Token might have expired, invalidate and retry
-                            cachedSessionToken = ""
-                            tokenLastUpdatedTime = 0L
-                            getOrFetchFreshToken(context)
-                            continue
                         }
+                    } else if (attempt == 0 && (response.code == 400 || response.code == 401 || response.code == 403)) {
+                        cachedSessionToken = ""
+                        tokenLastUpdatedTime = 0L
+                        getOrFetchFreshToken(context)
+                        return@use
                     }
-                } else if (attempt == 0 && (response.code == 400 || response.code == 401 || response.code == 403)) {
-                    cachedSessionToken = ""
-                    tokenLastUpdatedTime = 0L
-                    getOrFetchFreshToken(context)
-                    continue
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error searching movies page $page for: $keyword (attempt $attempt)", e)
@@ -752,9 +754,14 @@ object MovieBoxApiClient {
                     .get()
                     .build()
 
-                val response = client.newCall(request).execute()
-                if (!response.isSuccessful) continue
-                val jsonStr = response.body?.string() ?: continue
+                val jsonStr = try {
+                    client.newCall(request).execute().use { response ->
+                        if (!response.isSuccessful) return@use null
+                        response.body?.string()
+                    }
+                } catch (e: Exception) {
+                    null
+                } ?: continue
                 if (jsonStr.isBlank()) continue
 
                 val prettyDetailJson = try {

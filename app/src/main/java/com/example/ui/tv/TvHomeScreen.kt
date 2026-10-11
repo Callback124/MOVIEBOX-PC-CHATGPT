@@ -38,6 +38,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
@@ -109,6 +110,7 @@ fun TvHomeMainFeedView(
     onOpenSearch: () -> Unit,
     onOpenSearchWithQuery: (String) -> Unit = {},
     onOpenDownloads: () -> Unit,
+    onOpenWatchHistory: () -> Unit = {},
     onBannerClick: (HeroBanner) -> Unit,
     onPlayBanner: (HeroBanner) -> Unit,
     onMovieClick: (MovieItem, List<MovieItem>, Boolean) -> Unit,
@@ -161,6 +163,7 @@ fun TvHomeMainFeedView(
                 activeServer = uiState.activeServer,
                 onOpenSearch = onOpenSearch,
                 onOpenDownloads = onOpenDownloads,
+                onOpenWatchHistory = onOpenWatchHistory,
                 onOpenSettings = { showServerChooseDialog = true },
                 firstFocusRequester = firstFocusRequester
             )
@@ -189,6 +192,7 @@ fun TvHomeMainFeedView(
                 activeServer = uiState.activeServer,
                 onOpenSearch = onOpenSearch,
                 onOpenDownloads = onOpenDownloads,
+                onOpenWatchHistory = onOpenWatchHistory,
                 onOpenSettings = { showServerChooseDialog = true },
                 firstFocusRequester = firstFocusRequester
             )
@@ -450,6 +454,7 @@ private fun TvTopNavBar(
     activeServer: AppServer,
     onOpenSearch: () -> Unit,
     onOpenDownloads: () -> Unit,
+    onOpenWatchHistory: () -> Unit = {},
     onOpenSettings: () -> Unit,
     firstFocusRequester: FocusRequester? = null
 ) {
@@ -614,6 +619,11 @@ private fun TvTopNavBar(
                 icon = Icons.Default.Download,
                 label = "Downloads",
                 onClick = onOpenDownloads
+            )
+            TvNavButton(
+                icon = Icons.Default.History,
+                label = "History",
+                onClick = onOpenWatchHistory
             )
             TvNavButton(
                 icon = Icons.Default.Settings,

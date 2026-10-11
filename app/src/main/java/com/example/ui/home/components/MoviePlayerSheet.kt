@@ -233,6 +233,7 @@ fun MoviePlayerSheet(
             .setDataSourceFactory(httpDataSourceFactory)
 
         val renderersFactory = DefaultRenderersFactory(context).apply {
+            setEnableDecoderFallback(true)
             setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
         }
 

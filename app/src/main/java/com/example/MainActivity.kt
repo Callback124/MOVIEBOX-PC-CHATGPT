@@ -45,6 +45,9 @@ class MainActivity : ComponentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         enableEdgeToEdge()
 
+        com.example.data.repository.WatchHistoryManager.init(applicationContext)
+        com.example.data.repository.RecentSearchesManager.init(applicationContext)
+
         // Configure ultra-high-performance Coil ImageLoader for instantaneous image rendering
         val imageOkHttpClient = OkHttpClient.Builder()
             .connectionPool(ConnectionPool(12, 5, TimeUnit.MINUTES))

@@ -106,6 +106,7 @@ import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.dash.DashMediaSource
 import androidx.media3.exoplayer.hls.HlsMediaSource
@@ -518,7 +519,12 @@ fun ShortsReelPlayer(
     }
 
     // Resolve episodes of this short drama:
-    val resolvedEpisodes = remember(episodes, detailedInfo, vskitEpisodes, storyTvEpisodes, freeReelsEpisodes, movie.corner, movie.totalEpisodes) {
+    val targetEpNumber = remember(currentEpisode, initialIndex) {
+        val fromStr = currentEpisode.toIntOrNull() ?: 0
+        if (fromStr > 0) fromStr else if (initialIndex >= 0) initialIndex + 1 else 1
+    }
+
+    val resolvedEpisodes = remember(episodes, detailedInfo, vskitEpisodes, storyTvEpisodes, freeReelsEpisodes, movie.corner, movie.totalEpisodes, targetEpNumber) {
         if (freeReelsEpisodes.isNotEmpty()) {
             freeReelsEpisodes.map { String.format("%02d", it.index) }
         } else if (storyTvEpisodes.isNotEmpty()) {
@@ -532,14 +538,17 @@ fun ShortsReelPlayer(
                 ?: detailedInfo?.seasons?.maxOfOrNull { it.maxEp }
                 ?: detailedInfo?.seasons?.firstOrNull()?.maxEp
             if (fromDetail != null && fromDetail > 1) {
-                (1..fromDetail).map { String.format("%02d", it) }
+                val maxEp = maxOf(fromDetail, targetEpNumber)
+                (1..maxEp).map { String.format("%02d", it) }
             } else if (movie.totalEpisodes > 1) {
-                (1..movie.totalEpisodes).map { String.format("%02d", it) }
+                val maxEp = maxOf(movie.totalEpisodes, targetEpNumber)
+                (1..maxEp).map { String.format("%02d", it) }
             } else {
                 val cornerEp = Regex("""(\d+)\s*(?:EP|ep|Episodes|Ep)""").find(movie.corner)?.groupValues?.get(1)?.toIntOrNull()
                     ?: Regex("""(\d+)""").find(movie.corner)?.groupValues?.get(1)?.toIntOrNull()
                     ?: Regex("""(\d+)""").find(detailedInfo?.corner ?: "")?.groupValues?.get(1)?.toIntOrNull()
-                val epCount = if (cornerEp != null && cornerEp in 2..500) cornerEp else 60
+                val baseEpCount = if (cornerEp != null && cornerEp in 2..500) cornerEp else 60
+                val epCount = maxOf(baseEpCount, targetEpNumber)
                 (1..epCount).map { String.format("%02d", it) }
             }
         }
@@ -598,12 +607,14 @@ fun ShortsReelPlayer(
         } else reelItems
     }
 
-    val computedInitialIndex = remember(safeList, currentEpisode, initialIndex) {
-        if (initialIndex in safeList.indices && initialIndex > 0) {
+    val computedInitialIndex = remember(safeList, targetEpNumber, initialIndex) {
+        val byEp = safeList.indexOfFirst { it.episode == targetEpNumber }
+        if (byEp >= 0) {
+            byEp
+        } else if (initialIndex in safeList.indices && initialIndex > 0) {
             initialIndex
         } else {
-            val targetEp = currentEpisode.toIntOrNull() ?: 1
-            safeList.indexOfFirst { it.episode == targetEp }.coerceIn(0, (safeList.size - 1).coerceAtLeast(0))
+            (targetEpNumber - 1).coerceIn(0, (safeList.size - 1).coerceAtLeast(0))
         }
     }
 
@@ -611,6 +622,19 @@ fun ShortsReelPlayer(
         initialPage = computedInitialIndex,
         pageCount = { safeList.size }
     )
+
+    var hasLockedInitialEpisode by remember(movie.id, targetEpNumber) { mutableStateOf(false) }
+    LaunchedEffect(safeList, targetEpNumber) {
+        if (!hasLockedInitialEpisode && targetEpNumber > 1 && safeList.isNotEmpty()) {
+            val targetIdx = safeList.indexOfFirst { it.episode == targetEpNumber }
+            if (targetIdx >= 0 && pagerState.currentPage != targetIdx) {
+                pagerState.scrollToPage(targetIdx)
+            }
+            if (freeReelsEpisodes.isNotEmpty() || storyTvEpisodes.isNotEmpty() || vskitEpisodes.isNotEmpty() || detailedInfo != null) {
+                hasLockedInitialEpisode = true
+            }
+        }
+    }
 
     // Enforce Orientation and Hide System UI while in Shorts Fullscreen
     // CRITICAL: On TV keep in Landscape (16:9). On Mobile keep in Portrait (9:16) and restore Portrait on exit!
@@ -643,7 +667,11 @@ fun ShortsReelPlayer(
 
     // Single ExoPlayer instance for optimal resource usage
     val exoPlayer = remember {
-        ExoPlayer.Builder(context).build().apply {
+        val renderersFactory = DefaultRenderersFactory(context).apply {
+            setEnableDecoderFallback(true)
+            setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+        }
+        ExoPlayer.Builder(context, renderersFactory).build().apply {
             playWhenReady = true
             repeatMode = Player.REPEAT_MODE_OFF
         }
@@ -830,6 +858,41 @@ fun ShortsReelPlayer(
         }
     }
 
+    fun saveShortsHistory(curItem: ReelEpisodeItem, posMs: Long, durMs: Long) {
+        val epNum = if (curItem.episode > 0) curItem.episode else (pagerState.currentPage + 1)
+        val effectiveMovieId = curItem.movie.id.ifBlank {
+            detailedInfo?.subjectId?.takeIf { it.isNotBlank() }
+                ?: curItem.movie.detailPath.ifBlank { curItem.movie.title }
+        }
+        if (effectiveMovieId.isBlank() && curItem.movie.title.isBlank()) return
+        val pct = if (durMs > 0L && posMs > 0L) {
+            ((posMs.toFloat() / durMs.toFloat()) * 100).toInt().coerceIn(1, 100)
+        } else {
+            5
+        }
+        com.example.data.repository.WatchHistoryManager.recordProgress(
+            com.example.data.model.WatchHistoryItem(
+                id = "${effectiveMovieId}_shorts",
+                movieId = curItem.movie.id.ifBlank { effectiveMovieId },
+                title = curItem.movie.title.ifBlank { detailedInfo?.title ?: "Short Drama" },
+                season = 0,
+                episode = epNum,
+                isSeries = true,
+                coverUrl = curItem.movie.coverUrl.ifBlank { detailedInfo?.coverUrl ?: "" },
+                backdropUrl = curItem.movie.backdropUrl.ifBlank { detailedInfo?.backdropUrl ?: "" },
+                durationMs = durMs.coerceAtLeast(0L),
+                durationFormatted = if (durMs > 0L) formatShortTime(durMs) else "",
+                lastPositionMs = posMs.coerceAtLeast(0L),
+                progressPercent = pct,
+                source = curItem.movie.source,
+                detailPath = curItem.movie.detailPath.ifBlank { detailedInfo?.detailPath ?: "" },
+                subjectType = if (curItem.movie.subjectType > 1) curItem.movie.subjectType else 7,
+                genre = curItem.movie.genre.ifBlank { detailedInfo?.genre ?: "" },
+                isShortsPlayer = true
+            )
+        )
+    }
+
     // ExoPlayer Listener: handles buffering, readiness, error, audio tracks, and AUTO-PLAY NEXT WITH SCROLL ANIMATION
     DisposableEffect(exoPlayer) {
         val listener = object : Player.Listener {
@@ -840,15 +903,19 @@ fun ShortsReelPlayer(
                     }
                     Player.STATE_READY -> {
                         isBuffering = false
-                        if (exoPlayer.duration > 0) {
-                            durationMs = exoPlayer.duration
+                        val dur = exoPlayer.duration
+                        if (dur > 0) {
+                            durationMs = dur
                         }
                         updateAudioTracks()
+                        val curItem = safeList.getOrNull(pagerState.currentPage)
+                        if (curItem != null) {
+                            saveShortsHistory(curItem, exoPlayer.currentPosition.coerceAtLeast(0L), durationMs)
+                        }
                     }
                     Player.STATE_ENDED -> {
                         isBuffering = false
-                        currentPositionMs = if (durationMs > 0) durationMs else exoPlayer.duration.coerceAtLeast(0L)
-                        // AUTO PLAY NEXT EPISODE WITH SMOOTH SCROLL ANIMATION (Reel Style!)
+                        // Auto-play next episode with smooth reel scroll!
                         scope.launch {
                             val nextIndex = pagerState.currentPage + 1
                             if (nextIndex < safeList.size) {
@@ -905,13 +972,20 @@ fun ShortsReelPlayer(
         }
         exoPlayer.addListener(listener)
         onDispose {
+            val curItem = safeList.getOrNull(pagerState.currentPage)
+            if (curItem != null) {
+                val pos = exoPlayer.currentPosition.coerceAtLeast(currentPositionMs)
+                val dur = exoPlayer.duration.coerceAtLeast(durationMs)
+                saveShortsHistory(curItem, pos, dur)
+            }
             exoPlayer.removeListener(listener)
             exoPlayer.release()
         }
     }
 
     // Progress updater loop
-    LaunchedEffect(isPlaying) {
+    LaunchedEffect(isPlaying, pagerState.currentPage) {
+        var lastSavedSec = -1L
         while (isPlaying) {
             if (!isSeeking) {
                 val pos = exoPlayer.currentPosition.coerceAtLeast(0L)
@@ -923,8 +997,18 @@ fun ShortsReelPlayer(
                 if (durationMs > 0 && currentPositionMs > durationMs) {
                     durationMs = currentPositionMs
                 }
+                if (currentPositionMs > 500L) {
+                    val sec = currentPositionMs / 2500L
+                    if (sec != lastSavedSec) {
+                        lastSavedSec = sec
+                        val curItem = safeList.getOrNull(pagerState.currentPage)
+                        if (curItem != null) {
+                            saveShortsHistory(curItem, currentPositionMs, durationMs)
+                        }
+                    }
+                }
             }
-            delay(250)
+            delay(500)
         }
     }
 
@@ -1465,11 +1549,13 @@ fun ShortsReelPlayer(
             exoPlayer.setMediaSource(mediaSource)
             exoPlayer.prepare()
             exoPlayer.play()
+            saveShortsHistory(currentItem, 0L, durationMs)
         } catch (_: Exception) {
             val fallback = buildShortMediaSource(context, FALLBACK_SHORT_STREAM, "MP4")
             exoPlayer.setMediaSource(fallback)
             exoPlayer.prepare()
             exoPlayer.play()
+            saveShortsHistory(currentItem, 0L, durationMs)
         }
 
         val activeDigits = extractResolutionHeight(selectedQuality)

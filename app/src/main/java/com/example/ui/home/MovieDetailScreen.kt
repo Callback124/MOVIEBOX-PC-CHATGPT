@@ -78,6 +78,7 @@ fun MovieDetailScreen(
     isDownloaded: Boolean = false,
     downloadedSeason: Int = 0,
     downloadedEpisode: Int = 0,
+    initialSeekMs: Long = 0L,
     isInWatchlist: Boolean = false,
     onBackClick: () -> Unit,
     onToggleWatchlist: ((String) -> Unit)? = null,
@@ -139,6 +140,10 @@ fun MovieDetailScreen(
 
     // Dynamic detail fetch state from MovieBox API
     var detailedInfo by remember(activeMovie.id, activeMovie.detailPath) { mutableStateOf<SubjectDetailResult?>(null) }
+
+    var activeInitialSeekMs by remember(movie.id) { mutableStateOf(initialSeekMs) }
+    var hasAppliedInitialSeason by remember(movie.id, downloadedSeason) { mutableStateOf(false) }
+    var hasAppliedInitialEpisode by remember(movie.id, downloadedEpisode) { mutableStateOf(false) }
 
     fun switchDubLanguage(dub: DubLanguage) {
         currentSelectedDub = dub
@@ -263,19 +268,22 @@ fun MovieDetailScreen(
         }
     }
 
-    var selectedSeason by remember(activeMovie) {
+    var selectedSeason by remember(movie.id, downloadedSeason) {
         mutableIntStateOf(
-            if (isDownloaded && downloadedSeason > 0) downloadedSeason
+            if (downloadedSeason > 0) downloadedSeason
             else if (isSeries) 1 else 0
         )
     }
     var showSeasonDropdown by remember { mutableStateOf(false) }
 
-    LaunchedEffect(availableSeasons, isSeries) {
+    LaunchedEffect(availableSeasons, isSeries, downloadedSeason) {
         if (isSeries) {
-            if (isDownloaded && downloadedSeason > 0) {
+            if (downloadedSeason > 0 && !hasAppliedInitialSeason) {
                 selectedSeason = downloadedSeason
-            } else if (availableSeasons.isNotEmpty() && !availableSeasons.contains(selectedSeason)) {
+                hasAppliedInitialSeason = true
+            } else if (selectedSeason <= 0) {
+                selectedSeason = if (downloadedSeason > 0) downloadedSeason else (availableSeasons.firstOrNull() ?: 1)
+            } else if (availableSeasons.isNotEmpty() && !availableSeasons.contains(selectedSeason) && hasAppliedInitialSeason) {
                 selectedSeason = availableSeasons.first()
             }
         } else {
@@ -284,7 +292,7 @@ fun MovieDetailScreen(
     }
 
     // Episode list
-    val episodes = remember(selectedSeason, isSeries, detailedInfo, activeMovie) {
+    val episodes = remember(selectedSeason, isSeries, detailedInfo, activeMovie, downloadedEpisode) {
         if (!isSeries) {
             emptyList()
         } else {
@@ -302,26 +310,44 @@ fun MovieDetailScreen(
                 candidateMax == 1 -> 1
                 else -> 12
             }
-            val finalMaxEp: Int = if (effectiveMaxEp <= 1 && isSeries) {
+            val baseMaxEp: Int = if (effectiveMaxEp <= 1 && isSeries) {
                 cornerEp ?: totalEp ?: 24
             } else {
                 effectiveMaxEp
             }
+            val finalMaxEp = maxOf(baseMaxEp, downloadedEpisode)
             (1..finalMaxEp).map { String.format("%02d", it) }
         }
     }
-    var selectedEpisode by remember(activeMovie) {
+    var selectedEpisode by remember(movie.id, downloadedEpisode) {
         mutableStateOf(
-            if (isDownloaded && downloadedEpisode > 0) String.format("%02d", downloadedEpisode)
+            if (downloadedEpisode > 0) String.format("%02d", downloadedEpisode)
             else if (isSeries) "01" else "00"
         )
     }
 
-    LaunchedEffect(episodes, isSeries) {
+    val initialTargetSeason = remember(movie.id, downloadedSeason) {
+        if (downloadedSeason > 0) downloadedSeason else if (isSeries) 1 else 0
+    }
+    val initialTargetEpisode = remember(movie.id, downloadedEpisode) {
+        if (downloadedEpisode > 0) downloadedEpisode else if (isSeries) 1 else 0
+    }
+
+    LaunchedEffect(selectedSeason, selectedEpisode) {
+        val currentEpNum = selectedEpisode.toIntOrNull() ?: 0
+        if (selectedSeason != initialTargetSeason || currentEpNum != initialTargetEpisode) {
+            activeInitialSeekMs = 0L
+        }
+    }
+
+    LaunchedEffect(episodes, isSeries, downloadedEpisode) {
         if (isSeries) {
-            if (isDownloaded && downloadedEpisode > 0) {
+            if (downloadedEpisode > 0 && !hasAppliedInitialEpisode) {
                 selectedEpisode = String.format("%02d", downloadedEpisode)
-            } else if (episodes.isNotEmpty() && !episodes.contains(selectedEpisode)) {
+                hasAppliedInitialEpisode = true
+            } else if (selectedEpisode == "00" || selectedEpisode.isBlank()) {
+                selectedEpisode = if (downloadedEpisode > 0) String.format("%02d", downloadedEpisode) else "01"
+            } else if (episodes.isNotEmpty() && !episodes.contains(selectedEpisode) && hasAppliedInitialEpisode) {
                 selectedEpisode = episodes.first()
             }
         } else {
@@ -403,6 +429,9 @@ fun MovieDetailScreen(
                 val playNextEpisode = remember(isSeries, episodes, selectedEpisode, availableSeasons, selectedSeason) {
                     {
                         if (isSeries) {
+                            hasAppliedInitialSeason = true
+                            hasAppliedInitialEpisode = true
+                            activeInitialSeekMs = 0L
                             val currentEpNum = selectedEpisode.toIntOrNull() ?: 1
                             val currentIndex = episodes.indexOfFirst { (it.toIntOrNull() ?: 0) == currentEpNum }
                             if (currentIndex != -1 && currentIndex + 1 < episodes.size) {
@@ -455,6 +484,7 @@ fun MovieDetailScreen(
                     onPlaybackEnded = playNextEpisode,
                     availableSeasons = availableSeasons,
                     seasonsInfo = detailedInfo?.seasons ?: emptyList(),
+                    initialSeekMs = activeInitialSeekMs,
                     onSubjectDetailUpdated = { newDetail ->
                         detailedInfo = newDetail
                         activeMovie = activeMovie.copy(
@@ -789,7 +819,13 @@ fun MovieDetailScreen(
                                             )
                                         },
                                         onClick = {
-                                            selectedSeason = sNum
+                                            if (selectedSeason != sNum) {
+                                                hasAppliedInitialSeason = true
+                                                hasAppliedInitialEpisode = true
+                                                activeInitialSeekMs = 0L
+                                                selectedSeason = sNum
+                                                selectedEpisode = "01"
+                                            }
                                             showSeasonDropdown = false
                                         }
                                     )
@@ -813,7 +849,13 @@ fun MovieDetailScreen(
                                     shape = RoundedCornerShape(5.dp),
                                     color = if (isSelected) MovieBoxRed else Color(0xFF22222A),
                                     modifier = Modifier
-                                        .clickable { selectedEpisode = ep }
+                                        .clickable {
+                                            if (selectedEpisode != ep) {
+                                                hasAppliedInitialEpisode = true
+                                                activeInitialSeekMs = 0L
+                                                selectedEpisode = ep
+                                            }
+                                        }
                                         .width(46.dp)
                                         .height(36.dp)
                                         .testTag("episode_card_$ep")

@@ -115,6 +115,7 @@ import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.dash.DashMediaSource
 import androidx.media3.exoplayer.hls.HlsMediaSource
@@ -698,6 +699,7 @@ fun DetailVideoPlayer(
     availableSeasons: List<Int> = emptyList(),
     seasonsInfo: List<SeasonInfo> = emptyList(),
     onSubjectDetailUpdated: ((SubjectDetailResult) -> Unit)? = null,
+    initialSeekMs: Long = 0L,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -944,7 +946,11 @@ fun DetailVideoPlayer(
 
     // ExoPlayer instance
     val exoPlayer = remember {
-        ExoPlayer.Builder(context).build().apply {
+        val renderersFactory = DefaultRenderersFactory(context).apply {
+            setEnableDecoderFallback(true)
+            setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+        }
+        ExoPlayer.Builder(context, renderersFactory).build().apply {
             playWhenReady = true
             videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
         }
@@ -1077,6 +1083,45 @@ fun DetailVideoPlayer(
                 }
             }
             delay(500)
+        }
+    }
+
+    // Record watch history periodically while watching and when paused
+    LaunchedEffect(isPlaying, selectedSeason, selectedEpisode) {
+        var lastRecordedSec = -1L
+        while (isPlaying) {
+            val cur = exoPlayer.currentPosition.coerceAtLeast(0L)
+            val dur = exoPlayer.duration.coerceAtLeast(0L)
+            if (dur > 0L && cur > 1000L) {
+                val secInterval = cur / 3000L
+                if (secInterval != lastRecordedSec) {
+                    lastRecordedSec = secInterval
+                    val pct = ((cur.toFloat() / dur.toFloat()) * 100).toInt().coerceIn(1, 100)
+                    val historyId = "${movie.id}_s${selectedSeason}_e${selectedEpisode}"
+                    com.example.data.repository.WatchHistoryManager.recordProgress(
+                        com.example.data.model.WatchHistoryItem(
+                            id = historyId,
+                            movieId = movie.id,
+                            title = movie.title,
+                            season = selectedSeason,
+                            episode = selectedEpisode,
+                            isSeries = isSeries,
+                            coverUrl = movie.coverUrl.ifBlank { internalDetailedInfo?.coverUrl ?: "" },
+                            backdropUrl = movie.backdropUrl.ifBlank { internalDetailedInfo?.backdropUrl ?: "" },
+                            durationMs = dur,
+                            durationFormatted = formatTime(dur),
+                            lastPositionMs = cur,
+                            progressPercent = pct,
+                            source = movie.source,
+                            detailPath = movie.detailPath.ifBlank { internalDetailedInfo?.detailPath ?: "" },
+                            subjectType = if (isSeries && movie.subjectType <= 1) 2 else movie.subjectType,
+                            genre = movie.genre,
+                            isShortsPlayer = false
+                        )
+                    )
+                }
+            }
+            delay(1000)
         }
     }
 
@@ -1348,7 +1393,23 @@ fun DetailVideoPlayer(
         }
     }
 
-    var pendingSeekPos by remember { mutableLongStateOf(-1L) }
+    var pendingSeekPos by remember(movie.id) {
+        mutableLongStateOf(if (initialSeekMs > 0L) initialSeekMs else -1L)
+    }
+    var lastEpisodeMarker by remember(movie.id) {
+        mutableStateOf("${selectedSeason}_${selectedEpisode}")
+    }
+    LaunchedEffect(selectedSeason, selectedEpisode) {
+        val currentEpMarker = "${selectedSeason}_${selectedEpisode}"
+        if (currentEpMarker != lastEpisodeMarker) {
+            lastEpisodeMarker = currentEpMarker
+            // When user or auto-play changes episode/season, always start new episode from 00:00
+            pendingSeekPos = -1L
+            currentPositionMs = 0L
+            exoPlayer.stop()
+            exoPlayer.clearMediaItems()
+        }
+    }
     var lastMediaKey by remember { mutableStateOf("") }
     val activeDubForMedia = availableAudioTracks.find { it.id == currentActiveAudioTrackId && it.isDub }
     val effectiveSubjForMedia = activeDubForMedia?.dubSubjectId?.takeIf { it.isNotBlank() } ?: movie.id
@@ -1367,15 +1428,24 @@ fun DetailVideoPlayer(
             val currentPos = if (isNewMedia) 0L else exoPlayer.currentPosition
             try {
                 val mediaSource = createMediaSource(context, activeStreamUrl, activeFormat, effectiveMediaHeaders)
-                exoPlayer.setMediaSource(mediaSource)
-                exoPlayer.prepare()
                 if (pendingSeekPos >= 0L) {
-                    exoPlayer.seekTo(pendingSeekPos)
+                    val targetSeek = pendingSeekPos
                     pendingSeekPos = -1L
+                    exoPlayer.setMediaSource(mediaSource, targetSeek)
+                    exoPlayer.prepare()
+                    exoPlayer.seekTo(targetSeek)
                 } else if (isNewMedia) {
-                    exoPlayer.seekTo(0)
+                    exoPlayer.setMediaSource(mediaSource, /* resetPosition = */ true)
+                    exoPlayer.prepare()
+                    exoPlayer.seekTo(0L)
+                    currentPositionMs = 0L
                 } else if (currentPos > 0) {
+                    exoPlayer.setMediaSource(mediaSource, currentPos)
+                    exoPlayer.prepare()
                     exoPlayer.seekTo(currentPos)
+                } else {
+                    exoPlayer.setMediaSource(mediaSource, /* resetPosition = */ true)
+                    exoPlayer.prepare()
                 }
                 exoPlayer.playWhenReady = true
                 exoPlayer.play()

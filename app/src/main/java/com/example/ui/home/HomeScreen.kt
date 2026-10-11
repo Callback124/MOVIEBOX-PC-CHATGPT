@@ -44,6 +44,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
@@ -136,52 +137,103 @@ fun HomeScreen(
         ) { screen ->
         when (screen) {
             is AppScreen.Home -> {
-                HomeMainFeedView(
-                    uiState = uiState,
-                    onOpenSearch = { viewModel.openSearch() },
-                    onOpenSearchWithQuery = { query -> viewModel.openSearchWithQuery(query) },
-                    onOpenDownloads = { viewModel.openDownloads() },
-                    onBannerClick = { banner ->
-                        val movieItem = banner.toMovieItem()
-                        if (movieItem.subjectType == 7 || movieItem.subjectTypeInfo.isDirectShortsPlayer || uiState.activeServer == AppServer.SERVER_2 || uiState.activeServer == AppServer.SERVER_4 || uiState.activeServer == AppServer.SERVER_5 || movieItem.isStoryTvServer || movieItem.isFreeReelsServer) {
-                            viewModel.openShortsPlayer(movieItem)
-                        } else {
-                            viewModel.openBannerDetail(banner)
-                        }
-                    },
-                    onPlayBanner = { banner ->
-                        val movieItem = banner.toMovieItem()
-                        if (movieItem.subjectType == 7 || movieItem.subjectTypeInfo.isDirectShortsPlayer || uiState.activeServer == AppServer.SERVER_2 || uiState.activeServer == AppServer.SERVER_4 || uiState.activeServer == AppServer.SERVER_5 || movieItem.isStoryTvServer || movieItem.isFreeReelsServer) {
-                            viewModel.openShortsPlayer(movieItem)
-                        } else {
-                            viewModel.openMovieDetail(movieItem, isFromShortsPage = false)
-                        }
-                    },
-                    onMovieClick = { movie, playlist, isFromHotShortTv ->
-                        if (movie.subjectType == 7 || movie.subjectTypeInfo.isDirectShortsPlayer || uiState.activeServer == AppServer.SERVER_2 || uiState.activeServer == AppServer.SERVER_4 || uiState.activeServer == AppServer.SERVER_5 || movie.isStoryTvServer || movie.isFreeReelsServer || (uiState.activeServer == AppServer.SERVER_1 && isFromHotShortTv)) {
-                            viewModel.openShortsPlayer(movie, playlist)
-                        } else {
-                            viewModel.openMovieDetail(movie, playlist = playlist, isFromShortsPage = false)
-                        }
-                    },
-                    onViewMoreClick = { section, isShorts, isLandscape ->
-                        val isHotShortTv = if (uiState.activeServer == AppServer.SERVER_1) {
-                            section.isHotShortTvSection
-                        } else {
-                            section.isHotShortTvSection || isShorts || true
-                        }
-                        viewModel.openSectionPage(section, isShortsSection = isHotShortTv, isLandscape = isLandscape)
-                    },
-                    onToggleServer = { viewModel.toggleServer() },
-                    onSelectServer = { server -> viewModel.switchServer(server) },
-                    onLoadMoreRecommend = { viewModel.loadMoreVskitFilterShorts() },
-                    onSelectLookrCategory = { viewModel.selectLookrCategory(it) },
-                    onSelectLookrSubTag = { viewModel.selectLookrSubTag(it) },
-                    onLoadMoreLookr = { viewModel.loadMoreLookrItems() },
-                    onSelectStoryTvLanguage = { viewModel.selectStoryTvLanguage(it) },
-                    onLoadMoreStoryTv = { viewModel.loadMoreStoryTvItems() },
-                    onLoadMoreFreeReels = { viewModel.loadMoreFreeReelsItems() }
-                )
+                if (isTvDevice) {
+                    com.example.ui.tv.TvHomeMainFeedView(
+                        uiState = uiState,
+                        onOpenSearch = { viewModel.openSearch() },
+                        onOpenSearchWithQuery = { query -> viewModel.openSearchWithQuery(query) },
+                        onOpenDownloads = { viewModel.openDownloads() },
+                        onOpenWatchHistory = { viewModel.openWatchHistory() },
+                        onBannerClick = { banner ->
+                            val movieItem = banner.toMovieItem()
+                            if (movieItem.subjectType == 7 || movieItem.subjectTypeInfo.isDirectShortsPlayer || uiState.activeServer == AppServer.SERVER_2 || uiState.activeServer == AppServer.SERVER_4 || uiState.activeServer == AppServer.SERVER_5 || movieItem.isStoryTvServer || movieItem.isFreeReelsServer) {
+                                viewModel.openShortsPlayer(movieItem)
+                            } else {
+                                viewModel.openBannerDetail(banner)
+                            }
+                        },
+                        onPlayBanner = { banner ->
+                            val movieItem = banner.toMovieItem()
+                            if (movieItem.subjectType == 7 || movieItem.subjectTypeInfo.isDirectShortsPlayer || uiState.activeServer == AppServer.SERVER_2 || uiState.activeServer == AppServer.SERVER_4 || uiState.activeServer == AppServer.SERVER_5 || movieItem.isStoryTvServer || movieItem.isFreeReelsServer) {
+                                viewModel.openShortsPlayer(movieItem)
+                            } else {
+                                viewModel.openMovieDetail(movieItem, isFromShortsPage = false)
+                            }
+                        },
+                        onMovieClick = { movie, playlist, isFromHotShortTv ->
+                            if (movie.subjectType == 7 || movie.subjectTypeInfo.isDirectShortsPlayer || uiState.activeServer == AppServer.SERVER_2 || uiState.activeServer == AppServer.SERVER_4 || uiState.activeServer == AppServer.SERVER_5 || movie.isStoryTvServer || movie.isFreeReelsServer || (uiState.activeServer == AppServer.SERVER_1 && isFromHotShortTv)) {
+                                viewModel.openShortsPlayer(movie, playlist)
+                            } else {
+                                viewModel.openMovieDetail(movie, playlist = playlist, isFromShortsPage = false)
+                            }
+                        },
+                        onViewMoreClick = { section, isShorts, isLandscape ->
+                            val isHotShortTv = if (uiState.activeServer == AppServer.SERVER_1) {
+                                section.isHotShortTvSection
+                            } else {
+                                section.isHotShortTvSection || isShorts || true
+                            }
+                            viewModel.openSectionPage(section, isShortsSection = isHotShortTv, isLandscape = isLandscape)
+                        },
+                        onToggleServer = { viewModel.toggleServer() },
+                        onSelectServer = { server -> viewModel.switchServer(server) },
+                        onLoadMoreRecommend = { viewModel.loadMoreVskitFilterShorts() },
+                        onSelectLookrCategory = { viewModel.selectLookrCategory(it) },
+                        onSelectLookrSubTag = { viewModel.selectLookrSubTag(it) },
+                        onLoadMoreLookr = { viewModel.loadMoreLookrItems() },
+                        onSelectStoryTvLanguage = { viewModel.selectStoryTvLanguage(it) },
+                        onLoadMoreStoryTv = { viewModel.loadMoreStoryTvItems() },
+                        onLoadMoreFreeReels = { viewModel.loadMoreFreeReelsItems() }
+                    )
+                } else {
+                    HomeMainFeedView(
+                        uiState = uiState,
+                        onOpenSearch = { viewModel.openSearch() },
+                        onOpenSearchWithQuery = { query -> viewModel.openSearchWithQuery(query) },
+                        onOpenDownloads = { viewModel.openDownloads() },
+                        onOpenWatchHistory = { viewModel.openWatchHistory() },
+                        onBannerClick = { banner ->
+                            val movieItem = banner.toMovieItem()
+                            if (movieItem.subjectType == 7 || movieItem.subjectTypeInfo.isDirectShortsPlayer || uiState.activeServer == AppServer.SERVER_2 || uiState.activeServer == AppServer.SERVER_4 || uiState.activeServer == AppServer.SERVER_5 || movieItem.isStoryTvServer || movieItem.isFreeReelsServer) {
+                                viewModel.openShortsPlayer(movieItem)
+                            } else {
+                                viewModel.openBannerDetail(banner)
+                            }
+                        },
+                        onPlayBanner = { banner ->
+                            val movieItem = banner.toMovieItem()
+                            if (movieItem.subjectType == 7 || movieItem.subjectTypeInfo.isDirectShortsPlayer || uiState.activeServer == AppServer.SERVER_2 || uiState.activeServer == AppServer.SERVER_4 || uiState.activeServer == AppServer.SERVER_5 || movieItem.isStoryTvServer || movieItem.isFreeReelsServer) {
+                                viewModel.openShortsPlayer(movieItem)
+                            } else {
+                                viewModel.openMovieDetail(movieItem, isFromShortsPage = false)
+                            }
+                        },
+                        onMovieClick = { movie, playlist, isFromHotShortTv ->
+                            if (movie.subjectType == 7 || movie.subjectTypeInfo.isDirectShortsPlayer || uiState.activeServer == AppServer.SERVER_2 || uiState.activeServer == AppServer.SERVER_4 || uiState.activeServer == AppServer.SERVER_5 || movie.isStoryTvServer || movie.isFreeReelsServer || (uiState.activeServer == AppServer.SERVER_1 && isFromHotShortTv)) {
+                                viewModel.openShortsPlayer(movie, playlist)
+                            } else {
+                                viewModel.openMovieDetail(movie, playlist = playlist, isFromShortsPage = false)
+                            }
+                        },
+                        onViewMoreClick = { section, isShorts, isLandscape ->
+                            val isHotShortTv = if (uiState.activeServer == AppServer.SERVER_1) {
+                                section.isHotShortTvSection
+                            } else {
+                                section.isHotShortTvSection || isShorts || true
+                            }
+                            viewModel.openSectionPage(section, isShortsSection = isHotShortTv, isLandscape = isLandscape)
+                        },
+                        onToggleServer = { viewModel.toggleServer() },
+                        onSelectServer = { server -> viewModel.switchServer(server) },
+                        onLoadMoreRecommend = { viewModel.loadMoreVskitFilterShorts() },
+                        onSelectLookrCategory = { viewModel.selectLookrCategory(it) },
+                        onSelectLookrSubTag = { viewModel.selectLookrSubTag(it) },
+                        onLoadMoreLookr = { viewModel.loadMoreLookrItems() },
+                        onSelectStoryTvLanguage = { viewModel.selectStoryTvLanguage(it) },
+                        onLoadMoreStoryTv = { viewModel.loadMoreStoryTvItems() },
+                        onLoadMoreFreeReels = { viewModel.loadMoreFreeReelsItems() }
+                    )
+                }
             }
 
             is AppScreen.Downloads -> {
@@ -193,6 +245,23 @@ fun HomeScreen(
                 )
             }
 
+            is AppScreen.WatchHistory -> {
+                val historyItems by com.example.data.repository.WatchHistoryManager.historyFlow.collectAsState()
+                WatchHistoryScreen(
+                    historyItems = historyItems,
+                    onBackClick = { viewModel.navigateBack() },
+                    onPlayItem = { historyItem ->
+                        viewModel.playHistoryItem(historyItem)
+                    },
+                    onDeleteItem = { id ->
+                        com.example.data.repository.WatchHistoryManager.deleteItem(id)
+                    },
+                    onClearAll = {
+                        com.example.data.repository.WatchHistoryManager.clearAll()
+                    }
+                )
+            }
+
             is AppScreen.Search -> {
                 if (uiState.activeServer == AppServer.SERVER_6) {
                     JioSaavnSearchScreen(
@@ -200,6 +269,10 @@ fun HomeScreen(
                         onBackClick = { viewModel.navigateBack() }
                     )
                 } else {
+                    val recentSearches by remember(uiState.activeServer) {
+                        com.example.data.repository.RecentSearchesManager.getRecentSearchesFlow(uiState.activeServer)
+                    }.collectAsState()
+
                     SearchScreen(
                         searchQuery = uiState.searchQuery,
                         committedSearchQuery = uiState.committedSearchQuery,
@@ -219,18 +292,28 @@ fun HomeScreen(
                                 viewModel.openMovieDetail(movie, isFromShortsPage = false)
                             }
                         },
-                        onLoadMore = { viewModel.loadMoreSearchResults() }
+                        onLoadMore = { viewModel.loadMoreSearchResults() },
+                        recentSearches = recentSearches,
+                        onSelectRecentSearch = { query ->
+                            viewModel.onSearchQueryChanged(query)
+                            viewModel.submitSearch(query)
+                        },
+                        onClearRecentSearches = {
+                            viewModel.clearRecentSearches()
+                        }
                     )
                 }
             }
 
             is AppScreen.Shorts -> {
-                val movie = uiState.selectedMovie ?: screen.movie
+                val movie = screen.movie
+                val targetEpStr = if (screen.initialEpisode > 0) String.format("%02d", screen.initialEpisode) else "01"
+                val targetIndex = if (screen.initialEpisode > 0) screen.initialEpisode - 1 else 0
                 ShortsReelPlayer(
                     movie = movie,
                     playlist = screen.playlist,
-                    currentEpisode = "01",
-                    initialIndex = 0,
+                    currentEpisode = targetEpStr,
+                    initialIndex = targetIndex,
                     onClose = { viewModel.navigateBack() },
                     modifier = Modifier.fillMaxSize()
                 )
@@ -265,7 +348,7 @@ fun HomeScreen(
             }
 
             is AppScreen.MovieDetail -> {
-                val movie = uiState.selectedMovie ?: screen.movie
+                val movie = screen.movie
                 MovieDetailScreen(
                     movie = movie,
                     playlist = screen.playlist,
@@ -273,6 +356,7 @@ fun HomeScreen(
                     isDownloaded = screen.isDownloaded,
                     downloadedSeason = screen.downloadedSeason,
                     downloadedEpisode = screen.downloadedEpisode,
+                    initialSeekMs = screen.initialSeekMs,
                     isInWatchlist = uiState.watchlistIds.contains(movie.id),
                     onBackClick = { viewModel.navigateBack() },
                     onToggleWatchlist = { viewModel.toggleWatchlist(it) }
@@ -308,6 +392,7 @@ private fun HomeMainFeedView(
     onOpenSearch: () -> Unit,
     onOpenSearchWithQuery: (String) -> Unit = {},
     onOpenDownloads: () -> Unit,
+    onOpenWatchHistory: () -> Unit,
     onBannerClick: (com.example.data.model.HeroBanner) -> Unit,
     onPlayBanner: (com.example.data.model.HeroBanner) -> Unit,
     onMovieClick: (MovieItem, List<MovieItem>, Boolean) -> Unit,
@@ -577,6 +662,33 @@ private fun HomeMainFeedView(
                                 )
                             }
                         }
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    // Dedicated Watch History Page Button (Right of Downloads Button)
+                    var isHistoryBtnFocused by remember { mutableStateOf(false) }
+                    IconButton(
+                        onClick = onOpenWatchHistory,
+                        modifier = Modifier
+                            .size(38.dp)
+                            .onFocusChanged { isHistoryBtnFocused = it.isFocused }
+                            .focusable()
+                            .border(
+                                width = if (isHistoryBtnFocused) 2.dp else 0.dp,
+                                color = if (isHistoryBtnFocused) Color.White else Color.Transparent,
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(DarkSurfaceVariant)
+                            .testTag("home_history_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.History,
+                            contentDescription = "Watch History",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
                 }
             }
