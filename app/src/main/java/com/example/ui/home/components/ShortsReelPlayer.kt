@@ -185,7 +185,11 @@ private fun buildShortMediaSource(
     val uri = if (streamUrl.startsWith("/")) Uri.fromFile(java.io.File(streamUrl)) else Uri.parse(streamUrl)
 
     val isStoryTv = streamUrl.contains("storytv.asia", ignoreCase = true)
-    val defaultHeaders = if (isStoryTv) {
+    val isGoogleVideo = streamUrl.contains("googlevideo.com", ignoreCase = true) ||
+        customHeaders["Origin"]?.contains("youtube.com", ignoreCase = true) == true
+    val defaultHeaders = if (isGoogleVideo) {
+        mapOf("Accept" to "*/*")
+    } else if (isStoryTv) {
         mapOf(
             "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
             "Accept" to "*/*"
@@ -407,6 +411,9 @@ fun ShortsReelPlayer(
         mutableStateOf(detailedInfo?.dubs?.ifEmpty { null } ?: movie.dubs)
     }
     var activePlayingStreamUrl by remember { mutableStateOf("") }
+    val isInitialYouTube = remember(movie.source) { movie.source.equals("youtube", ignoreCase = true) }
+    var useYouTubeWebEmbed by remember(movie.id) { mutableStateOf(isInitialYouTube) }
+    var ytShortSeekRequestMs by remember { mutableLongStateOf(-1L) }
 
     LaunchedEffect(movie.id, movie.detailPath, movie.isVskitServer, movie.isStoryTvServer, movie.isFreeReelsServer, movie.source) {
         val isFreeReels = movie.isFreeReelsServer || movie.source.equals("freereels", ignoreCase = true)
@@ -492,6 +499,13 @@ fun ShortsReelPlayer(
                     android.util.Log.e("ShortsReelPlayer", "Error loading Vskit episodes", e)
                 }
             }
+        } else if (movie.source.equals("youtube", ignoreCase = true)) {
+            val res = com.example.data.api.YouTubeApiClient.fetchVideoDetail(
+                videoId = subjectId
+            )
+            if (res != null) {
+                detailedInfo = res
+            }
         } else if (movie.source.equals("lookr", ignoreCase = true)) {
             val res = LookrApiClient.fetchSubjectDetail(
                 detailPath = movie.detailPath,
@@ -554,39 +568,75 @@ fun ShortsReelPlayer(
         }
     }
 
-    // Build the reel episode items:
-    // Each reel page is an EPISODE of this short drama!
-    val reelItems = remember(movie, resolvedEpisodes, vskitEpisodes, storyTvEpisodes, freeReelsEpisodes, selectedSeason) {
-        resolvedEpisodes.mapIndexed { index, epStr ->
-            val epNum = epStr.toIntOrNull() ?: (index + 1)
-            val vskitItem = vskitEpisodes.find { it.ep == epNum }
-            val storyTvItem = storyTvEpisodes.find { it.index == epNum }
-            val freeReelsItem = freeReelsEpisodes.find { it.index == epNum }
-            val isStory = movie.isStoryTvServer || movie.source.equals("storytv", ignoreCase = true)
-            val isFreeReels = movie.isFreeReelsServer || movie.source.equals("freereels", ignoreCase = true)
-            val directStream = if (isFreeReels) {
-                freeReelsItem?.playableUrl?.ifBlank { null } ?: if (epNum == 1) movie.directUrl else ""
-            } else if (isStory) {
-                storyTvItem?.url?.ifBlank { null } ?: if (epNum == 1) movie.directUrl else ""
+    val isYouTubeShorts = remember(movie, playlist) {
+        movie.source.equals("youtube", ignoreCase = true)
+    }
+
+    val youtubePlaylistItems = remember(movie, playlist) {
+        val shortsFromPlaylist = playlist.filter { it.source.equals("youtube", ignoreCase = true) }
+        if (shortsFromPlaylist.isNotEmpty()) {
+            if (shortsFromPlaylist.any { it.id == movie.id }) {
+                shortsFromPlaylist
             } else {
-                vskitItem?.videoUrl ?: ""
+                listOf(movie) + shortsFromPlaylist
             }
-            val sub = freeReelsItem?.name?.ifBlank { null }
-                ?: storyTvItem?.title?.ifBlank { "Episode $epNum" }
-                ?: "Episode $epNum"
-            ReelEpisodeItem(
-                id = "${movie.id}_s${selectedSeason}_ep_${epNum}",
-                movie = movie,
-                season = if (selectedSeason > 0) selectedSeason else 1,
-                episode = epNum,
-                episodeFormatted = epStr,
-                title = movie.title,
-                subtitle = sub,
-                description = movie.description,
-                directStreamUrl = directStream,
-                directStreams = vskitItem?.streams ?: emptyList(),
-                defaultResolution = vskitItem?.resolution ?: "720"
-            )
+        } else {
+            listOf(movie)
+        }
+    }
+
+    // Build the reel episode items:
+    // Each reel page is an EPISODE of this short drama (or a YouTube Short in the playlist)!
+    val reelItems = remember(movie, isYouTubeShorts, youtubePlaylistItems, resolvedEpisodes, vskitEpisodes, storyTvEpisodes, freeReelsEpisodes, selectedSeason) {
+        if (isYouTubeShorts) {
+            youtubePlaylistItems.mapIndexed { index, ytItem ->
+                val epNum = index + 1
+                ReelEpisodeItem(
+                    id = "yt_short_${ytItem.id}_$index",
+                    movie = ytItem,
+                    season = 1,
+                    episode = epNum,
+                    episodeFormatted = String.format("%02d", epNum),
+                    title = ytItem.title,
+                    subtitle = ytItem.uploadBy.ifBlank { "YouTube Shorts" },
+                    description = ytItem.description,
+                    directStreamUrl = ytItem.directUrl,
+                    directStreams = emptyList(),
+                    defaultResolution = "1080"
+                )
+            }
+        } else {
+            resolvedEpisodes.mapIndexed { index, epStr ->
+                val epNum = epStr.toIntOrNull() ?: (index + 1)
+                val vskitItem = vskitEpisodes.find { it.ep == epNum }
+                val storyTvItem = storyTvEpisodes.find { it.index == epNum }
+                val freeReelsItem = freeReelsEpisodes.find { it.index == epNum }
+                val isStory = movie.isStoryTvServer || movie.source.equals("storytv", ignoreCase = true)
+                val isFreeReels = movie.isFreeReelsServer || movie.source.equals("freereels", ignoreCase = true)
+                val directStream = if (isFreeReels) {
+                    freeReelsItem?.playableUrl?.ifBlank { null } ?: if (epNum == 1) movie.directUrl else ""
+                } else if (isStory) {
+                    storyTvItem?.url?.ifBlank { null } ?: if (epNum == 1) movie.directUrl else ""
+                } else {
+                    vskitItem?.videoUrl ?: ""
+                }
+                val sub = freeReelsItem?.name?.ifBlank { null }
+                    ?: storyTvItem?.title?.ifBlank { "Episode $epNum" }
+                    ?: "Episode $epNum"
+                ReelEpisodeItem(
+                    id = "${movie.id}_s${selectedSeason}_ep_${epNum}",
+                    movie = movie,
+                    season = if (selectedSeason > 0) selectedSeason else 1,
+                    episode = epNum,
+                    episodeFormatted = epStr,
+                    title = movie.title,
+                    subtitle = sub,
+                    description = movie.description,
+                    directStreamUrl = directStream,
+                    directStreams = vskitItem?.streams ?: emptyList(),
+                    defaultResolution = vskitItem?.resolution ?: "720"
+                )
+            }
         }
     }
 
@@ -607,14 +657,19 @@ fun ShortsReelPlayer(
         } else reelItems
     }
 
-    val computedInitialIndex = remember(safeList, targetEpNumber, initialIndex) {
-        val byEp = safeList.indexOfFirst { it.episode == targetEpNumber }
-        if (byEp >= 0) {
-            byEp
-        } else if (initialIndex in safeList.indices && initialIndex > 0) {
-            initialIndex
+    val computedInitialIndex = remember(safeList, isYouTubeShorts, movie.id, targetEpNumber, initialIndex) {
+        if (isYouTubeShorts) {
+            val byMovieId = safeList.indexOfFirst { it.movie.id == movie.id }
+            if (byMovieId >= 0) byMovieId else 0
         } else {
-            (targetEpNumber - 1).coerceIn(0, (safeList.size - 1).coerceAtLeast(0))
+            val byEp = safeList.indexOfFirst { it.episode == targetEpNumber }
+            if (byEp >= 0) {
+                byEp
+            } else if (initialIndex in safeList.indices && initialIndex > 0) {
+                initialIndex
+            } else {
+                (targetEpNumber - 1).coerceIn(0, (safeList.size - 1).coerceAtLeast(0))
+            }
         }
     }
 
@@ -777,6 +832,12 @@ fun ShortsReelPlayer(
 
     // Toggle Play/Pause helper
     fun togglePlayPause() {
+        if (useYouTubeWebEmbed) {
+            isPlaying = !isPlaying
+            showPlayPauseIndicator = true
+            if (!isPlaying && !isTv) areControlsVisible = true
+            return
+        }
         if (exoPlayer.isPlaying) {
             exoPlayer.pause()
             isPlaying = false
@@ -946,6 +1007,11 @@ fun ShortsReelPlayer(
                 isBuffering = false
                 scope.launch {
                     val curItem = safeList.getOrNull(pagerState.currentPage)
+                    if (curItem != null && curItem.movie.source.equals("youtube", ignoreCase = true)) {
+                        useYouTubeWebEmbed = true
+                        exoPlayer.stop()
+                        return@launch
+                    }
                     if (curItem != null && (curItem.movie.isStoryTvServer || curItem.movie.source.equals("storytv", ignoreCase = true))) {
                         val cleanId = curItem.movie.id.filter { it.isDigit() }
                             .ifBlank { curItem.movie.detailPath.filter { it.isDigit() } }
@@ -984,9 +1050,9 @@ fun ShortsReelPlayer(
     }
 
     // Progress updater loop
-    LaunchedEffect(isPlaying, pagerState.currentPage) {
+    LaunchedEffect(isPlaying, pagerState.currentPage, useYouTubeWebEmbed) {
         var lastSavedSec = -1L
-        while (isPlaying) {
+        while (isPlaying && !useYouTubeWebEmbed) {
             if (!isSeeking) {
                 val pos = exoPlayer.currentPosition.coerceAtLeast(0L)
                 currentPositionMs = pos
@@ -1090,6 +1156,11 @@ fun ShortsReelPlayer(
                                     val fmt = if (match.videoUrl.contains(".m3u8")) "HLS" else "MP4"
                                     listOf(MovieStream(id = "vskit_${match.ep}", resolution = cleanRes, format = fmt, url = match.videoUrl))
                                 } else emptyList()
+                            } else if (item.movie.source.equals("youtube", ignoreCase = true)) {
+                                val ytRes = com.example.data.api.YouTubeApiClient.fetchPlayStreams(
+                                    videoId = item.movie.id.ifBlank { item.movie.detailPath }
+                                )
+                                ytRes.streams.filter { it.url.isNotBlank() }
                             } else if (item.movie.source.equals("lookr", ignoreCase = true)) {
                                 val lookrStreams = com.example.data.api.LookrApiClient.fetchStreams(
                                     subjectId = item.movie.id,
@@ -1461,8 +1532,12 @@ fun ShortsReelPlayer(
             }
             isFetchingStream = false
         } else {
-            // MOVIEBOX / LOOKR / NON-VSKIT
-            val streamResult = if (currentItem.movie.source.equals("lookr", ignoreCase = true)) {
+            // MOVIEBOX / LOOKR / YOUTUBE / NON-VSKIT
+            val streamResult = if (currentItem.movie.source.equals("youtube", ignoreCase = true)) {
+                com.example.data.api.YouTubeApiClient.fetchPlayStreams(
+                    videoId = currentItem.movie.id.ifBlank { currentItem.movie.detailPath }
+                )
+            } else if (currentItem.movie.source.equals("lookr", ignoreCase = true)) {
                 val lookrStreams = com.example.data.api.LookrApiClient.fetchStreams(
                     subjectId = targetSubjectId,
                     detailPath = targetDetailPath,
@@ -1527,35 +1602,55 @@ fun ShortsReelPlayer(
             }
 
             val ep1Fallback = if (currentItem.episode == 1) currentItem.movie.directUrl.ifBlank { null } else null
-            streamUrl = chosenStream?.url?.ifBlank { null } ?: currentItem.directStreamUrl.ifBlank { null } ?: ep1Fallback ?: FALLBACK_SHORT_STREAM
-            format = chosenStream?.format ?: if (streamUrl.contains(".m3u8")) "HLS" else "MP4"
-            if (streamUrl != FALLBACK_SHORT_STREAM) {
+            val candidateUrl = chosenStream?.url?.ifBlank { null } ?: currentItem.directStreamUrl.ifBlank { null } ?: ep1Fallback
+            if (candidateUrl.isNullOrBlank() && currentItem.movie.source.equals("youtube", ignoreCase = true)) {
+                streamUrl = ""
+                format = "YT_EMBED"
+            } else {
+                streamUrl = candidateUrl ?: FALLBACK_SHORT_STREAM
+                format = chosenStream?.format ?: if (streamUrl.contains(".m3u8")) "HLS" else "MP4"
+            }
+            if (streamUrl.isNotBlank() && streamUrl != FALLBACK_SHORT_STREAM) {
                 activePlayingStreamUrl = streamUrl
             }
 
-            if (streamUrl != FALLBACK_SHORT_STREAM) {
+            if (streamUrl.isNotBlank() && streamUrl != FALLBACK_SHORT_STREAM) {
                 streamCache[cacheKey] = CachedShortStream(streamUrl, format, currentEpisodeStreams, availableVideoQualities, selectedQuality)
             }
             isFetchingStream = false
         }
 
-        val effectiveShortHeaders = if (currentItem.movie.source.equals("lookr", ignoreCase = true)) {
-            com.example.data.api.LookrApiClient.LOOKR_VIDEO_HEADERS
+        if (currentItem.movie.source.equals("youtube", ignoreCase = true) && (streamUrl.isBlank() || format == "YT_EMBED")) {
+            useYouTubeWebEmbed = true
+            isPlaying = true
+            isBuffering = true
+            saveShortsHistory(currentItem, 0L, durationMs)
         } else {
-            currentItem.movie.customHeaders
-        }
-        try {
-            val mediaSource = buildShortMediaSource(context, streamUrl, format, effectiveShortHeaders)
-            exoPlayer.setMediaSource(mediaSource)
-            exoPlayer.prepare()
-            exoPlayer.play()
-            saveShortsHistory(currentItem, 0L, durationMs)
-        } catch (_: Exception) {
-            val fallback = buildShortMediaSource(context, FALLBACK_SHORT_STREAM, "MP4")
-            exoPlayer.setMediaSource(fallback)
-            exoPlayer.prepare()
-            exoPlayer.play()
-            saveShortsHistory(currentItem, 0L, durationMs)
+            useYouTubeWebEmbed = false
+            val effectiveShortHeaders = when {
+                currentItem.movie.source.equals("youtube", ignoreCase = true) -> {
+                    com.example.data.api.YouTubeApiClient.YOUTUBE_VIDEO_HEADERS
+                }
+                currentItem.movie.source.equals("lookr", ignoreCase = true) -> {
+                    com.example.data.api.LookrApiClient.LOOKR_VIDEO_HEADERS
+                }
+                else -> {
+                    currentItem.movie.customHeaders
+                }
+            }
+            try {
+                val mediaSource = buildShortMediaSource(context, streamUrl, format, effectiveShortHeaders)
+                exoPlayer.setMediaSource(mediaSource)
+                exoPlayer.prepare()
+                exoPlayer.play()
+                saveShortsHistory(currentItem, 0L, durationMs)
+            } catch (_: Exception) {
+                val fallback = buildShortMediaSource(context, FALLBACK_SHORT_STREAM, "MP4")
+                exoPlayer.setMediaSource(fallback)
+                exoPlayer.prepare()
+                exoPlayer.play()
+                saveShortsHistory(currentItem, 0L, durationMs)
+            }
         }
 
         val activeDigits = extractResolutionHeight(selectedQuality)
@@ -1600,8 +1695,9 @@ fun ShortsReelPlayer(
                         KeyEvent.KEYCODE_DPAD_LEFT,
                         KeyEvent.KEYCODE_MEDIA_REWIND,
                         KeyEvent.KEYCODE_MEDIA_PREVIOUS -> {
-                            val newPos = (exoPlayer.currentPosition - 10000L).coerceAtLeast(0L)
-                            exoPlayer.seekTo(newPos)
+                            val basePos = if (useYouTubeWebEmbed) currentPositionMs else exoPlayer.currentPosition
+                            val newPos = (basePos - 10000L).coerceAtLeast(0L)
+                            if (useYouTubeWebEmbed) ytShortSeekRequestMs = newPos else exoPlayer.seekTo(newPos)
                             currentPositionMs = newPos
                             if (!isTv) areControlsVisible = true
                             true
@@ -1610,8 +1706,9 @@ fun ShortsReelPlayer(
                         KeyEvent.KEYCODE_MEDIA_FAST_FORWARD,
                         KeyEvent.KEYCODE_MEDIA_NEXT -> {
                             val maxDur = if (durationMs > 0) durationMs else exoPlayer.duration
-                            val newPos = (exoPlayer.currentPosition + 10000L).coerceAtMost(if (maxDur > 0) maxDur else Long.MAX_VALUE)
-                            exoPlayer.seekTo(newPos)
+                            val basePos = if (useYouTubeWebEmbed) currentPositionMs else exoPlayer.currentPosition
+                            val newPos = (basePos + 10000L).coerceAtMost(if (maxDur > 0) maxDur else Long.MAX_VALUE)
+                            if (useYouTubeWebEmbed) ytShortSeekRequestMs = newPos else exoPlayer.seekTo(newPos)
                             currentPositionMs = newPos
                             if (!isTv) areControlsVisible = true
                             true
@@ -1668,23 +1765,61 @@ fun ShortsReelPlayer(
                         }
                     }
             ) {
-                // Video Surface (Only attached to ExoPlayer if current active page)
+                // Video Surface (Only attached to active page)
                 if (page == pagerState.currentPage) {
-                    AndroidView(
-                        factory = { ctx ->
-                            PlayerView(ctx).apply {
-                                player = exoPlayer
-                                useController = false
-                                this.resizeMode = resizeMode
-                                keepScreenOn = true
-                            }
-                        },
-                        update = { pv ->
-                            pv.player = exoPlayer
-                            pv.resizeMode = resizeMode
-                        },
-                        modifier = Modifier.fillMaxSize()
-                    )
+                    if (useYouTubeWebEmbed && shortItem.movie.source.equals("youtube", ignoreCase = true)) {
+                        YouTubeWebPlayerSurface(
+                            videoId = shortItem.movie.id.ifBlank { shortItem.movie.detailPath },
+                            isPlaying = isPlaying,
+                            isMuted = isMuted,
+                            seekRequestMs = ytShortSeekRequestMs,
+                            onReady = { durMs ->
+                                isBuffering = false
+                                isFetchingStream = false
+                                if (durMs > 0L) durationMs = durMs
+                            },
+                            onProgress = { curMs, durMs ->
+                                if (!isSeeking) {
+                                    currentPositionMs = curMs
+                                    if (durMs > 0L) durationMs = durMs
+                                }
+                            },
+                            onBufferingChanged = { buf ->
+                                isBuffering = buf
+                            },
+                            onStatePlayingChanged = { playing ->
+                                isPlaying = playing
+                            },
+                            onEnded = {
+                                scope.launch {
+                                    val nextIndex = pagerState.currentPage + 1
+                                    if (nextIndex < safeList.size) {
+                                        pagerState.animateScrollToPage(nextIndex)
+                                    } else {
+                                        isPlaying = false
+                                        areControlsVisible = true
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        AndroidView(
+                            factory = { ctx ->
+                                PlayerView(ctx).apply {
+                                    player = exoPlayer
+                                    useController = false
+                                    this.resizeMode = resizeMode
+                                    keepScreenOn = true
+                                }
+                            },
+                            update = { pv ->
+                                pv.player = exoPlayer
+                                pv.resizeMode = resizeMode
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
                 }
 
                 // Centered Buffering Spinner (Requirement: Center loader in player)
@@ -1979,7 +2114,11 @@ fun ShortsReelPlayer(
                                 currentPositionMs = safePlayPosition,
                                 durationMs = safeTotalDuration,
                                 onSeekTo = { targetMs ->
-                                    exoPlayer.seekTo(targetMs)
+                                    if (useYouTubeWebEmbed) {
+                                        ytShortSeekRequestMs = targetMs
+                                    } else {
+                                        exoPlayer.seekTo(targetMs)
+                                    }
                                     currentPositionMs = targetMs
                                 },
                                 onSeekingChange = { seeking, targetMs ->
@@ -2024,10 +2163,16 @@ fun ShortsReelPlayer(
                             val cKey = "${targetSubjId}_${currentItem.season}_${currentItem.episode}"
                             streamCache[cKey] = CachedShortStream(targetStream.url, targetStream.format, currentEpisodeStreams, availableVideoQualities, newQuality)
                         }
-                        val shortHeaders = if (currentItem?.movie?.source.equals("lookr", ignoreCase = true)) {
-                            com.example.data.api.LookrApiClient.LOOKR_VIDEO_HEADERS
-                        } else {
-                            currentItem?.movie?.customHeaders ?: emptyMap()
+                        val shortHeaders = when {
+                            currentItem?.movie?.source.equals("youtube", ignoreCase = true) -> {
+                                com.example.data.api.YouTubeApiClient.YOUTUBE_VIDEO_HEADERS
+                            }
+                            currentItem?.movie?.source.equals("lookr", ignoreCase = true) -> {
+                                com.example.data.api.LookrApiClient.LOOKR_VIDEO_HEADERS
+                            }
+                            else -> {
+                                currentItem?.movie?.customHeaders ?: emptyMap()
+                            }
                         }
                         val mediaSource = buildShortMediaSource(context, targetStream.url, targetStream.format, shortHeaders)
                         exoPlayer.setMediaSource(mediaSource)

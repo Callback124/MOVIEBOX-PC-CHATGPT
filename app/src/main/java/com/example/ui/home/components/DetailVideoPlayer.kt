@@ -303,11 +303,17 @@ private fun createMediaSource(
     val isLocal = streamUrl.startsWith("/") || streamUrl.startsWith("file:")
     val uri = if (streamUrl.startsWith("/")) Uri.fromFile(java.io.File(streamUrl)) else Uri.parse(streamUrl)
 
-    val defaultHeaders = mapOf(
-        "Referer" to STREAM_REFERER,
-        "Origin" to STREAM_ORIGIN,
-        "Accept" to "*/*"
-    )
+    val isGoogleVideo = streamUrl.contains("googlevideo.com", ignoreCase = true) ||
+        customHeaders["Origin"]?.contains("youtube.com", ignoreCase = true) == true
+    val defaultHeaders = if (isGoogleVideo) {
+        mapOf("Accept" to "*/*")
+    } else {
+        mapOf(
+            "Referer" to STREAM_REFERER,
+            "Origin" to STREAM_ORIGIN,
+            "Accept" to "*/*"
+        )
+    }
     val requestHeaders = if (customHeaders.isNotEmpty()) {
         defaultHeaders + customHeaders
     } else {
@@ -720,6 +726,9 @@ fun DetailVideoPlayer(
     var playbackError by remember { mutableStateOf<String?>(null) }
     var lastLoadedStreamKey by remember { mutableStateOf("") }
     var isVideoPortrait by remember { mutableStateOf(isFromShortsPage || movie.isShort) }
+    val isYouTubeMovie = remember(movie.source) { movie.source.equals("youtube", ignoreCase = true) }
+    var useYouTubeWebEmbed by remember(movie.id, movie.detailPath) { mutableStateOf(isYouTubeMovie) }
+    var ytWebSeekRequestMs by remember { mutableLongStateOf(-1L) }
 
     // Dub languages fetched from details
     var currentDubs by remember(movie.id, dubs) { mutableStateOf(if (dubs.isNotEmpty()) dubs else movie.dubs) }
@@ -735,7 +744,11 @@ fun DetailVideoPlayer(
     LaunchedEffect(movie.id, movie.detailPath, isDownloaded) {
         if (!isDownloaded && (movie.detailPath.isNotBlank() || movie.id.isNotBlank())) {
             try {
-                val detail = if (movie.source.equals("lookr", ignoreCase = true)) {
+                val detail = if (movie.source.equals("youtube", ignoreCase = true)) {
+                    com.example.data.api.YouTubeApiClient.fetchVideoDetail(
+                        videoId = movie.id.ifBlank { movie.detailPath }
+                    )
+                } else if (movie.source.equals("lookr", ignoreCase = true)) {
                     com.example.data.api.LookrApiClient.fetchSubjectDetail(
                         detailPath = movie.detailPath,
                         subjectId = movie.id
@@ -1043,6 +1056,12 @@ fun DetailVideoPlayer(
 
             override fun onPlayerError(error: PlaybackException) {
                 isBuffering = false
+                if (isYouTubeMovie) {
+                    playbackError = null
+                    useYouTubeWebEmbed = true
+                    exoPlayer.stop()
+                    return
+                }
                 playbackError = "Playback error: ${error.errorCodeName}"
                 if (activeStreamUrl != FALLBACK_STREAM) {
                     scope.launch {
@@ -1065,8 +1084,8 @@ fun DetailVideoPlayer(
     }
 
     // Timeline progress updater
-    LaunchedEffect(isPlaying) {
-        while (isPlaying) {
+    LaunchedEffect(isPlaying, useYouTubeWebEmbed) {
+        while (isPlaying && !useYouTubeWebEmbed) {
             currentPositionMs = exoPlayer.currentPosition.coerceAtLeast(0L)
             if (exoPlayer.duration > 0) {
                 durationMs = exoPlayer.duration
@@ -1087,11 +1106,11 @@ fun DetailVideoPlayer(
     }
 
     // Record watch history periodically while watching and when paused
-    LaunchedEffect(isPlaying, selectedSeason, selectedEpisode) {
+    LaunchedEffect(isPlaying, selectedSeason, selectedEpisode, useYouTubeWebEmbed) {
         var lastRecordedSec = -1L
         while (isPlaying) {
-            val cur = exoPlayer.currentPosition.coerceAtLeast(0L)
-            val dur = exoPlayer.duration.coerceAtLeast(0L)
+            val cur = if (useYouTubeWebEmbed) currentPositionMs.coerceAtLeast(0L) else exoPlayer.currentPosition.coerceAtLeast(0L)
+            val dur = if (useYouTubeWebEmbed) durationMs.coerceAtLeast(0L) else exoPlayer.duration.coerceAtLeast(0L)
             if (dur > 0L && cur > 1000L) {
                 val secInterval = cur / 3000L
                 if (secInterval != lastRecordedSec) {
@@ -1309,7 +1328,11 @@ fun DetailVideoPlayer(
             tempSelectedVideoQuality = "1920 × 1080"
             isFetchingStream = false
         } else {
-            val result = if (movie.source.equals("lookr", ignoreCase = true)) {
+            val result = if (movie.source.equals("youtube", ignoreCase = true)) {
+                com.example.data.api.YouTubeApiClient.fetchPlayStreams(
+                    videoId = targetSubjectId.ifBlank { targetDetailPath }
+                )
+            } else if (movie.source.equals("lookr", ignoreCase = true)) {
                 val lookrStreams = com.example.data.api.LookrApiClient.fetchStreams(
                     subjectId = targetSubjectId,
                     detailPath = targetDetailPath,
@@ -1370,6 +1393,7 @@ fun DetailVideoPlayer(
             } ?: highestStream
 
             if (matchedStream != null && matchedStream.url.isNotBlank()) {
+                useYouTubeWebEmbed = false
                 activeStreamUrl = matchedStream.url
                 activeFormat = matchedStream.format
                 val matchedRes = extractResolutionHeight(matchedStream.resolution)
@@ -1377,7 +1401,16 @@ fun DetailVideoPlayer(
                 currentActiveVideoQuality = displayOpt
                 tempSelectedVideoQuality = displayOpt
                 onQualitySelected(displayOpt)
+            } else if (isYouTubeMovie) {
+                // Direct InnerTube stream was bot-gated; use official YouTube IFrame Player in WebView!
+                useYouTubeWebEmbed = true
+                activeStreamUrl = ""
+                activeFormat = "YT_EMBED"
+                currentActiveVideoQuality = "1920 × 1080"
+                tempSelectedVideoQuality = "1920 × 1080"
+                isBuffering = true
             } else {
+                useYouTubeWebEmbed = false
                 activeStreamUrl = FALLBACK_STREAM
                 activeFormat = "MP4"
             }
@@ -1386,10 +1419,16 @@ fun DetailVideoPlayer(
     }
 
     val effectiveMediaHeaders = remember(movie) {
-        if (movie.source.equals("lookr", ignoreCase = true)) {
-            com.example.data.api.LookrApiClient.LOOKR_VIDEO_HEADERS
-        } else {
-            movie.customHeaders
+        when {
+            movie.source.equals("youtube", ignoreCase = true) -> {
+                com.example.data.api.YouTubeApiClient.YOUTUBE_VIDEO_HEADERS
+            }
+            movie.source.equals("lookr", ignoreCase = true) -> {
+                com.example.data.api.LookrApiClient.LOOKR_VIDEO_HEADERS
+            }
+            else -> {
+                movie.customHeaders
+            }
         }
     }
 
@@ -1681,14 +1720,15 @@ fun DetailVideoPlayer(
                         if (!isLocked) {
                             val isRight = offset.x >= size.width / 2f
                             val dur = if (durationMs > 0) durationMs else exoPlayer.duration.coerceAtLeast(0L)
+                            val basePos = if (useYouTubeWebEmbed) currentPositionMs else exoPlayer.currentPosition
                             if (isRight) {
-                                val targetPos = (exoPlayer.currentPosition + 10000L).coerceAtMost(if (dur > 0) dur else Long.MAX_VALUE)
-                                exoPlayer.seekTo(targetPos)
+                                val targetPos = (basePos + 10000L).coerceAtMost(if (dur > 0) dur else Long.MAX_VALUE)
+                                if (useYouTubeWebEmbed) ytWebSeekRequestMs = targetPos else exoPlayer.seekTo(targetPos)
                                 currentPositionMs = targetPos
                                 doubleTapFeedback = PlayerDoubleTapFeedback(isRight = true, timestamp = System.currentTimeMillis())
                             } else {
-                                val targetPos = (exoPlayer.currentPosition - 10000L).coerceAtLeast(0L)
-                                exoPlayer.seekTo(targetPos)
+                                val targetPos = (basePos - 10000L).coerceAtLeast(0L)
+                                if (useYouTubeWebEmbed) ytWebSeekRequestMs = targetPos else exoPlayer.seekTo(targetPos)
                                 currentPositionMs = targetPos
                                 doubleTapFeedback = PlayerDoubleTapFeedback(isRight = false, timestamp = System.currentTimeMillis())
                             }
@@ -1783,7 +1823,7 @@ fun DetailVideoPlayer(
                     onDragEnd = {
                         if (activeGesture == PlayerGestureType.SWIPE_SEEK) {
                             seekGestureState?.let { state ->
-                                exoPlayer.seekTo(state.targetMs)
+                                if (useYouTubeWebEmbed) ytWebSeekRequestMs = state.targetMs else exoPlayer.seekTo(state.targetMs)
                                 currentPositionMs = state.targetMs
                             }
                         }
@@ -1829,8 +1869,9 @@ fun DetailVideoPlayer(
                                 KeyEvent.KEYCODE_DPAD_LEFT,
                                 KeyEvent.KEYCODE_MEDIA_REWIND,
                                 KeyEvent.KEYCODE_MEDIA_PREVIOUS -> {
-                                    val newPos = (exoPlayer.currentPosition - 10000L).coerceAtLeast(0L)
-                                    exoPlayer.seekTo(newPos)
+                                    val basePos = if (useYouTubeWebEmbed) currentPositionMs else exoPlayer.currentPosition
+                                    val newPos = (basePos - 10000L).coerceAtLeast(0L)
+                                    if (useYouTubeWebEmbed) ytWebSeekRequestMs = newPos else exoPlayer.seekTo(newPos)
                                     currentPositionMs = newPos
                                     true
                                 }
@@ -1838,15 +1879,20 @@ fun DetailVideoPlayer(
                                 KeyEvent.KEYCODE_MEDIA_FAST_FORWARD,
                                 KeyEvent.KEYCODE_MEDIA_NEXT -> {
                                     val maxDur = if (durationMs > 0) durationMs else exoPlayer.duration
-                                    val newPos = (exoPlayer.currentPosition + 10000L).coerceAtMost(if (maxDur > 0) maxDur else Long.MAX_VALUE)
-                                    exoPlayer.seekTo(newPos)
+                                    val basePos = if (useYouTubeWebEmbed) currentPositionMs else exoPlayer.currentPosition
+                                    val newPos = (basePos + 10000L).coerceAtMost(if (maxDur > 0) maxDur else Long.MAX_VALUE)
+                                    if (useYouTubeWebEmbed) ytWebSeekRequestMs = newPos else exoPlayer.seekTo(newPos)
                                     currentPositionMs = newPos
                                     true
                                 }
                                 KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
                                 KeyEvent.KEYCODE_MEDIA_PLAY,
                                 KeyEvent.KEYCODE_MEDIA_PAUSE -> {
-                                    if (isPlaying) exoPlayer.pause() else exoPlayer.play()
+                                    if (useYouTubeWebEmbed) {
+                                        isPlaying = !isPlaying
+                                    } else {
+                                        if (isPlaying) exoPlayer.pause() else exoPlayer.play()
+                                    }
                                     true
                                 }
                                 KeyEvent.KEYCODE_BACK -> {
@@ -1895,30 +1941,58 @@ fun DetailVideoPlayer(
                 } else false
             }
     ) {
-        // Native ExoPlayer View with dynamic resizeMode
-        AndroidView(
-            factory = { ctx ->
-                PlayerView(ctx).apply {
-                    player = exoPlayer
-                    useController = false
-                    keepScreenOn = true
-                    this.resizeMode = resizeMode
-                    layoutParams = FrameLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT
-                    )
-                }
-            },
-            update = { playerView ->
-                if (playerView.player != exoPlayer) {
-                    playerView.player = exoPlayer
-                }
-                if (playerView.resizeMode != resizeMode) {
-                    playerView.resizeMode = resizeMode
-                }
-            },
-            modifier = Modifier.fillMaxSize()
-        )
+        if (useYouTubeWebEmbed) {
+            YouTubeWebPlayerSurface(
+                videoId = movie.id.ifBlank { movie.detailPath },
+                isPlaying = isPlaying,
+                isMuted = isMuted,
+                seekRequestMs = ytWebSeekRequestMs,
+                onReady = { durMs ->
+                    isBuffering = false
+                    isFetchingStream = false
+                    if (durMs > 0L) durationMs = durMs
+                },
+                onProgress = { curMs, durMs ->
+                    currentPositionMs = curMs
+                    if (durMs > 0L) durationMs = durMs
+                },
+                onBufferingChanged = { buf ->
+                    isBuffering = buf
+                },
+                onStatePlayingChanged = { playing ->
+                    isPlaying = playing
+                },
+                onEnded = {
+                    isPlaying = false
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            // Native ExoPlayer View with dynamic resizeMode
+            AndroidView(
+                factory = { ctx ->
+                    PlayerView(ctx).apply {
+                        player = exoPlayer
+                        useController = false
+                        keepScreenOn = true
+                        this.resizeMode = resizeMode
+                        layoutParams = FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT
+                        )
+                    }
+                },
+                update = { playerView ->
+                    if (playerView.player != exoPlayer) {
+                        playerView.player = exoPlayer
+                    }
+                    if (playerView.resizeMode != resizeMode) {
+                        playerView.resizeMode = resizeMode
+                    }
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
 
         // Episode auto-play loading indicator
         if (isFetchingStream && isSeries) {
@@ -2192,8 +2266,10 @@ fun DetailVideoPlayer(
                                 contentDescription = "Rewind",
                                 iconSize = 28.dp,
                                 onClick = {
-                                    val newPos = (exoPlayer.currentPosition - 10000L).coerceAtLeast(0L)
-                                    exoPlayer.seekTo(newPos)
+                                    val basePos = if (useYouTubeWebEmbed) currentPositionMs else exoPlayer.currentPosition
+                                    val newPos = (basePos - 10000L).coerceAtLeast(0L)
+                                    if (useYouTubeWebEmbed) ytWebSeekRequestMs = newPos else exoPlayer.seekTo(newPos)
+                                    currentPositionMs = newPos
                                 }
                             )
 
@@ -2217,10 +2293,14 @@ fun DetailVideoPlayer(
                                     iconSize = 32.dp,
                                     focusRequester = playControlFocusRequester,
                                     onClick = {
-                                        if (exoPlayer.isPlaying) {
-                                            exoPlayer.pause()
+                                        if (useYouTubeWebEmbed) {
+                                            isPlaying = !isPlaying
                                         } else {
-                                            exoPlayer.play()
+                                            if (exoPlayer.isPlaying) {
+                                                exoPlayer.pause()
+                                            } else {
+                                                exoPlayer.play()
+                                            }
                                         }
                                     }
                                 )
@@ -2232,8 +2312,11 @@ fun DetailVideoPlayer(
                                 contentDescription = "Fast Forward",
                                 iconSize = 28.dp,
                                 onClick = {
-                                    val newPos = (exoPlayer.currentPosition + 10000L).coerceAtMost(exoPlayer.duration)
-                                    exoPlayer.seekTo(newPos)
+                                    val maxDur = if (durationMs > 0) durationMs else exoPlayer.duration
+                                    val basePos = if (useYouTubeWebEmbed) currentPositionMs else exoPlayer.currentPosition
+                                    val newPos = (basePos + 10000L).coerceAtMost(if (maxDur > 0) maxDur else Long.MAX_VALUE)
+                                    if (useYouTubeWebEmbed) ytWebSeekRequestMs = newPos else exoPlayer.seekTo(newPos)
+                                    currentPositionMs = newPos
                                 }
                             )
 
@@ -2288,7 +2371,12 @@ fun DetailVideoPlayer(
                                 currentPositionMs = currentPositionMs,
                                 durationMs = durationMs,
                                 onSeekTo = { targetMs ->
-                                    exoPlayer.seekTo(targetMs)
+                                    if (useYouTubeWebEmbed) {
+                                        ytWebSeekRequestMs = targetMs
+                                        currentPositionMs = targetMs
+                                    } else {
+                                        exoPlayer.seekTo(targetMs)
+                                    }
                                 },
                                 onSeekingChange = { seeking, targetMs ->
                                     isUserSeeking = seeking

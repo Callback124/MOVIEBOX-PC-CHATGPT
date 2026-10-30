@@ -943,7 +943,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun loadMoreSearchResults() {
-        if (_uiState.value.activeServer != AppServer.SERVER_1) return
+        val activeSrv = _uiState.value.activeServer
+
+        if (activeSrv != AppServer.SERVER_1) return
         val q = _uiState.value.committedSearchQuery.trim()
         if (q.isBlank() || !movieBoxSearchHasMore || isMovieBoxSearchLoadingNextPage) return
 

@@ -11,29 +11,50 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -324,6 +345,17 @@ fun MovieDetailScreen(
             if (downloadedEpisode > 0) String.format("%02d", downloadedEpisode)
             else if (isSeries) "01" else "00"
         )
+    }
+
+    var showAllEpisodesSheet by remember { mutableStateOf(false) }
+    val chunkSize = 50
+    val episodeChunks = remember(episodes) { episodes.chunked(chunkSize) }
+    val hasMultipleChunks = episodeChunks.size > 1
+    var selectedChunkIndex by remember(episodes) { mutableIntStateOf(0) }
+
+    // Intercept back button when All Episodes container is open
+    BackHandler(enabled = showAllEpisodesSheet) {
+        showAllEpisodesSheet = false
     }
 
     val initialTargetSeason = remember(movie.id, downloadedSeason) {
@@ -834,39 +866,90 @@ fun MovieDetailScreen(
                         }
                     }
 
-                    // Episodes Selector Row (Card border radius 5px, no border)
+                    // Episodes Selector Row with FIXED "ALL" Button on Left
                     if (episodes.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(8.dp))
-                        LazyRow(
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .testTag("episodes_lazy_row"),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                .testTag("episodes_selector_container"),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            items(episodes) { ep ->
-                                val isSelected = (ep == selectedEpisode)
-                                Surface(
-                                    shape = RoundedCornerShape(5.dp),
-                                    color = if (isSelected) MovieBoxRed else Color(0xFF22222A),
+                            // FIXED "ALL" BUTTON (Remains pinned to left even when episodes scroll horizontally)
+                            Surface(
+                                shape = RoundedCornerShape(5.dp),
+                                color = Color(0xFF262634),
+                                border = BorderStroke(1.dp, Color(0xFF3F3F52)),
+                                modifier = Modifier
+                                    .clickable {
+                                        val currentEpNum = selectedEpisode.toIntOrNull() ?: 1
+                                        selectedChunkIndex = ((currentEpNum - 1) / chunkSize).coerceIn(0, (episodeChunks.size - 1).coerceAtLeast(0))
+                                        showAllEpisodesSheet = true
+                                    }
+                                    .width(52.dp)
+                                    .height(36.dp)
+                                    .testTag("all_episodes_button")
+                            ) {
+                                Row(
                                     modifier = Modifier
-                                        .clickable {
-                                            if (selectedEpisode != ep) {
-                                                hasAppliedInitialEpisode = true
-                                                activeInitialSeekMs = 0L
-                                                selectedEpisode = ep
-                                            }
-                                        }
-                                        .width(46.dp)
-                                        .height(36.dp)
-                                        .testTag("episode_card_$ep")
+                                        .fillMaxSize()
+                                        .padding(horizontal = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
                                 ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Text(
-                                            text = ep,
-                                            color = Color.White,
-                                            fontSize = 12.sp,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                        )
+                                    Canvas(modifier = Modifier.size(11.dp)) {
+                                        val gap = 1.8.dp.toPx()
+                                        val boxSize = (size.width - gap) / 2f
+                                        val corner = CornerRadius(1.dp.toPx(), 1.dp.toPx())
+                                        drawRoundRect(color = MovieBoxRed, topLeft = Offset(0f, 0f), size = Size(boxSize, boxSize), cornerRadius = corner)
+                                        drawRoundRect(color = MovieBoxRed, topLeft = Offset(boxSize + gap, 0f), size = Size(boxSize, boxSize), cornerRadius = corner)
+                                        drawRoundRect(color = MovieBoxRed, topLeft = Offset(0f, boxSize + gap), size = Size(boxSize, boxSize), cornerRadius = corner)
+                                        drawRoundRect(color = MovieBoxRed, topLeft = Offset(boxSize + gap, boxSize + gap), size = Size(boxSize, boxSize), cornerRadius = corner)
+                                    }
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "All",
+                                        color = Color.White,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.width(8.dp))
+
+                            // Horizontally Scrollable Episode Cards
+                            LazyRow(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("episodes_lazy_row"),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(episodes) { ep ->
+                                    val isSelected = (ep == selectedEpisode)
+                                    Surface(
+                                        shape = RoundedCornerShape(5.dp),
+                                        color = if (isSelected) MovieBoxRed else Color(0xFF22222A),
+                                        modifier = Modifier
+                                            .clickable {
+                                                if (selectedEpisode != ep) {
+                                                    hasAppliedInitialEpisode = true
+                                                    activeInitialSeekMs = 0L
+                                                    selectedEpisode = ep
+                                                }
+                                            }
+                                            .width(46.dp)
+                                            .height(36.dp)
+                                            .testTag("episode_card_$ep")
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Text(
+                                                text = ep,
+                                                color = Color.White,
+                                                fontSize = 12.sp,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -876,5 +959,297 @@ fun MovieDetailScreen(
             }
         }
     }
-}
+
+        // 45% Height Bottom Container for All Episodes (Grid type, tabs 1-50, 51-100... when episodes > 50)
+        AnimatedVisibility(
+            visible = showAllEpisodesSheet,
+            enter = fadeIn(animationSpec = tween(250)),
+            exit = fadeOut(animationSpec = tween(200))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.65f))
+                    .clickable { showAllEpisodesSheet = false }
+            )
+        }
+
+        AnimatedVisibility(
+            visible = showAllEpisodesSheet,
+            enter = slideInVertically(
+                initialOffsetY = { it },
+                animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
+            ) + fadeIn(animationSpec = tween(200)),
+            exit = slideOutVertically(
+                targetOffsetY = { it },
+                animationSpec = tween(durationMillis = 250, easing = FastOutLinearInEasing)
+            ) + fadeOut(animationSpec = tween(200)),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .wrapContentHeight()
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .wrapContentHeight()
+                    .navigationBarsPadding(),
+                shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
+                color = Color(0xFF16161E),
+                shadowElevation = 16.dp,
+                border = BorderStroke(1.dp, Color(0xFF282836))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .wrapContentHeight()
+                ) {
+                    // Drag handle indicator
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp, bottom = 4.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(38.dp)
+                                .height(4.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(Color(0xFF454558))
+                        )
+                    }
+
+                    // Header Row: Season / Episodes title, season switcher if multiple seasons, and close button
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Canvas(modifier = Modifier.size(14.dp)) {
+                                val gap = 2.dp.toPx()
+                                val boxSize = (size.width - gap) / 2f
+                                val corner = CornerRadius(1.5.dp.toPx(), 1.5.dp.toPx())
+                                drawRoundRect(color = MovieBoxRed, topLeft = Offset(0f, 0f), size = Size(boxSize, boxSize), cornerRadius = corner)
+                                drawRoundRect(color = MovieBoxRed, topLeft = Offset(boxSize + gap, 0f), size = Size(boxSize, boxSize), cornerRadius = corner)
+                                drawRoundRect(color = MovieBoxRed, topLeft = Offset(0f, boxSize + gap), size = Size(boxSize, boxSize), cornerRadius = corner)
+                                drawRoundRect(color = MovieBoxRed, topLeft = Offset(boxSize + gap, boxSize + gap), size = Size(boxSize, boxSize), cornerRadius = corner)
+                            }
+
+                            Text(
+                                text = if (isSeries) String.format("Season %02d Episodes", selectedSeason) else "All Episodes",
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = MovieBoxRed.copy(alpha = 0.15f),
+                                border = BorderStroke(0.5.dp, MovieBoxRed.copy(alpha = 0.4f))
+                            ) {
+                                Text(
+                                    text = "${episodes.size} eps",
+                                    color = MovieBoxRed,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            if (availableSeasons.size > 1) {
+                                var showSheetSeasonMenu by remember { mutableStateOf(false) }
+                                Box {
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = Color(0xFF262634),
+                                        modifier = Modifier.clickable { showSheetSeasonMenu = true }
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Text(
+                                                text = String.format("S%02d", selectedSeason),
+                                                color = Color.White,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                            Icon(
+                                                imageVector = Icons.Default.KeyboardArrowDown,
+                                                contentDescription = "Switch Season",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        }
+                                    }
+
+                                    DropdownMenu(
+                                        expanded = showSheetSeasonMenu,
+                                        onDismissRequest = { showSheetSeasonMenu = false },
+                                        modifier = Modifier.background(DarkSurface)
+                                    ) {
+                                        availableSeasons.forEach { sNum ->
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Text(
+                                                        text = String.format("Season %02d", sNum),
+                                                        color = if (sNum == selectedSeason) MovieBoxRed else Color.White,
+                                                        fontSize = 12.sp,
+                                                        fontWeight = if (sNum == selectedSeason) FontWeight.Bold else FontWeight.Normal
+                                                    )
+                                                },
+                                                onClick = {
+                                                    if (selectedSeason != sNum) {
+                                                        hasAppliedInitialSeason = true
+                                                        hasAppliedInitialEpisode = true
+                                                        activeInitialSeekMs = 0L
+                                                        selectedSeason = sNum
+                                                        selectedEpisode = "01"
+                                                    }
+                                                    showSheetSeasonMenu = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            IconButton(
+                                onClick = { showAllEpisodesSheet = false },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Close",
+                                    tint = Color(0xFFA0A0B0),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    // Serial Tabs (1-50, 51-100, 101-150, etc. when episodes.size > 50)
+                    if (hasMultipleChunks) {
+                        LazyRow(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(episodeChunks.size) { chunkIdx ->
+                                val startEp = chunkIdx * chunkSize + 1
+                                val endEp = minOf((chunkIdx + 1) * chunkSize, episodes.size)
+                                val tabLabel = "$startEp-$endEp"
+                                val isTabSelected = (chunkIdx == selectedChunkIndex)
+
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = if (isTabSelected) MovieBoxRed else Color(0xFF22222E),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (isTabSelected) MovieBoxRed else Color(0xFF333342)
+                                    ),
+                                    modifier = Modifier
+                                        .clickable { selectedChunkIndex = chunkIdx }
+                                        .testTag("chunk_tab_$tabLabel")
+                                ) {
+                                    Text(
+                                        text = tabLabel,
+                                        color = if (isTabSelected) Color.White else Color(0xFFC0C0D0),
+                                        fontSize = 12.sp,
+                                        fontWeight = if (isTabSelected) FontWeight.Bold else FontWeight.Medium,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(
+                        color = Color(0xFF262634),
+                        thickness = 0.5.dp,
+                        modifier = Modifier.padding(vertical = 3.dp)
+                    )
+
+                    // Episode Grid (10 columns, 5 rows for 50 episodes, wraps content tightly with no bottom gap)
+                    val displayedEpisodes = if (hasMultipleChunks) {
+                        episodeChunks.getOrElse(selectedChunkIndex) { episodes }
+                    } else {
+                        episodes
+                    }
+
+                    val episodeRows = remember(displayedEpisodes) {
+                        displayedEpisodes.chunked(10)
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 10.dp)
+                            .testTag("all_episodes_grid"),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        episodeRows.forEach { rowEps ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                rowEps.forEach { ep ->
+                                    val isSelected = (ep == selectedEpisode)
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = if (isSelected) MovieBoxRed else Color(0xFF22222D),
+                                        border = BorderStroke(
+                                            if (isSelected) 1.dp else 0.5.dp,
+                                            if (isSelected) Color.White else Color(0xFF333342)
+                                        ),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .aspectRatio(1f)
+                                            .clickable {
+                                                if (selectedEpisode != ep) {
+                                                    hasAppliedInitialEpisode = true
+                                                    activeInitialSeekMs = 0L
+                                                    selectedEpisode = ep
+                                                }
+                                                showAllEpisodesSheet = false
+                                            }
+                                            .testTag("grid_episode_item_$ep")
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Text(
+                                                text = ep,
+                                                color = Color.White,
+                                                fontSize = if (ep.length > 2) 9.sp else 11.sp,
+                                                fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium
+                                            )
+                                        }
+                                    }
+                                }
+                                val remainingSlots = 10 - rowEps.size
+                                if (remainingSlots > 0) {
+                                    repeat(remainingSlots) {
+                                        Spacer(modifier = Modifier.weight(1f))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

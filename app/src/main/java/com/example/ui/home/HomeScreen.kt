@@ -286,10 +286,10 @@ fun HomeScreen(
                         onClearSearch = { viewModel.clearSearch() },
                         onBackClick = { viewModel.navigateBack() },
                         onMovieClick = { movie ->
-                            if (movie.subjectType == 7 || movie.subjectTypeInfo.isDirectShortsPlayer || uiState.activeServer == AppServer.SERVER_2 || uiState.activeServer == AppServer.SERVER_4 || uiState.activeServer == AppServer.SERVER_5 || movie.isStoryTvServer || movie.isFreeReelsServer) {
-                                viewModel.openShortsPlayer(movie)
+                            if (movie.subjectType == 7 || movie.isShort || movie.subjectTypeInfo.isDirectShortsPlayer || uiState.activeServer == AppServer.SERVER_2 || uiState.activeServer == AppServer.SERVER_4 || uiState.activeServer == AppServer.SERVER_5 || movie.isStoryTvServer || movie.isFreeReelsServer) {
+                                viewModel.openShortsPlayer(movie, playlist = uiState.searchResults)
                             } else {
-                                viewModel.openMovieDetail(movie, isFromShortsPage = false)
+                                viewModel.openMovieDetail(movie, playlist = uiState.searchResults, isFromShortsPage = false)
                             }
                         },
                         onLoadMore = { viewModel.loadMoreSearchResults() },
