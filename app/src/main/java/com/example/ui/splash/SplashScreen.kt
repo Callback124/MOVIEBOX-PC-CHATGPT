@@ -206,6 +206,18 @@ fun SplashScreen(
                     )
                 }
             }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // App Version Badge (e.g. v1.2)
+            Text(
+                text = "v${com.example.BuildConfig.VERSION_NAME}",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color.White.copy(alpha = 0.45f),
+                letterSpacing = 1.sp,
+                modifier = Modifier.testTag("splash_version_text")
+            )
         }
     }
 }

@@ -30,6 +30,7 @@ import com.example.ui.splash.SplashScreen
 import com.example.ui.theme.DarkBackground
 import com.example.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import okhttp3.Cache
 import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
@@ -97,9 +98,27 @@ class MainActivity : ComponentActivity() {
                 ) {
                     val uiState by homeViewModel.uiState.collectAsState()
                     var isSplashVisible by remember { mutableStateOf(true) }
+                    var updateInfo by remember { mutableStateOf<com.example.data.updater.AppUpdateInfo?>(null) }
+                    val downloadState by com.example.data.updater.AppUpdateManager.downloadState.collectAsState()
+                    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
+                    val context = androidx.compose.ui.platform.LocalContext.current
 
-                    LaunchedEffect(uiState.isLoading) {
-                        if (!uiState.isLoading) {
+                    // Check for updates on startup
+                    LaunchedEffect(Unit) {
+                        try {
+                            val info = com.example.data.updater.AppUpdateManager.checkForUpdates()
+                            if (info.hasUpdate) {
+                                updateInfo = info
+                            }
+                        } catch (_: Exception) {}
+                    }
+
+                    // Handle splash duration
+                    LaunchedEffect(uiState.isLoading, updateInfo) {
+                        if (updateInfo?.hasUpdate == true) {
+                            // If update is needed, transition immediately so update dialog is shown
+                            isSplashVisible = false
+                        } else if (!uiState.isLoading) {
                             delay(180)
                             isSplashVisible = false
                         } else {
@@ -119,6 +138,39 @@ class MainActivity : ComponentActivity() {
                             exit = fadeOut(animationSpec = tween(300))
                         ) {
                             SplashScreen()
+                        }
+
+                        // Mandatory Update Dialog - Blocks old version if update is available
+                        updateInfo?.let { info ->
+                            if (info.hasUpdate) {
+                                com.example.ui.components.MandatoryUpdateDialog(
+                                    updateInfo = info,
+                                    onOpenUpdateLink = {
+                                        try {
+                                            val targetUrl = info.downloadUrl.ifBlank {
+                                                "https://github.com/ananscommunication08/ALL-MOVIEBOX/releases/tag/release"
+                                            }
+                                            val browserIntent = android.content.Intent(
+                                                android.content.Intent.ACTION_VIEW,
+                                                android.net.Uri.parse(targetUrl)
+                                            ).apply {
+                                                flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                                            }
+                                            context.startActivity(browserIntent)
+                                        } catch (e: Exception) {
+                                            try {
+                                                val fallbackIntent = android.content.Intent(
+                                                    android.content.Intent.ACTION_VIEW,
+                                                    android.net.Uri.parse("https://github.com/ananscommunication08/ALL-MOVIEBOX/releases/tag/release")
+                                                ).apply {
+                                                    flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                                                }
+                                                context.startActivity(fallbackIntent)
+                                            } catch (_: Exception) {}
+                                        }
+                                    }
+                                )
+                            }
                         }
                     }
                 }

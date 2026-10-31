@@ -1,0 +1,21 @@
+PythonFlix - Movies, TV and a built-in media player (Windows 10/11)
+===================================================================
+
+Run from source (Python 3.9+):
+    pip install -r requirements.txt
+    python pythonflix.py
+
+Make a double-click .exe:
+    Double-click build_exe.bat  ->  dist\PythonFlix.exe
+    (it also installs VLC with winget if it is missing)
+
+Everything happens inside one window: details, settings, trailers and the player
+are pages of the app - no extra windows open.
+
+Player tab (VLC engine - plays almost every video/audio format):
+    Open files / Open folder / paste a link (mp4, m3u8, YouTube) / playlist
+    Keys: Space play-pause, Left/Right seek 10 s, Up/Down volume, F fullscreen, M mute, N next, P previous
+    Audio-track and subtitle menus, speed 0.5x - 2x, double-click video for fullscreen.
+    Trailers from the movie pages play here too.
+
+First launch: open Settings and paste a free TMDB API key (themoviedb.org > Settings > API).
