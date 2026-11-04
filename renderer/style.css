@@ -242,3 +242,19 @@ h1.page{margin:0 4% 6px;font-size:30px}
 .pb{background:none;font-size:20px;width:36px;height:36px}.pb.big{background:#fff;color:#000;border-radius:50%;font-size:16px}
 #pr{flex:1;accent-color:#e50914}
 @media(max-width:700px){.player .pi{width:120px}}
+
+/* ===== portrait posters, no-scroll rows, simple hover ===== */
+.row,.rowwrap,.row-head,.row-head a,.scroller,.scroller .card,.arrow{pointer-events:auto!important}
+.arrow{display:none!important}
+.row-head a{opacity:1!important;color:#54b9c5}
+.scroller{display:grid!important;grid-template-columns:repeat(var(--cols,6),minmax(0,1fr));gap:14px;padding:14px 4%!important;margin:0!important;overflow:visible!important}
+.grid{grid-template-columns:repeat(var(--cols,6),minmax(0,1fr))!important;gap:26px 14px!important;padding:14px 4% 80px!important}
+.scroller .card.pos{flex:none}
+.card.pos,.card.top10{transition:transform .2s ease;transform-origin:center}
+.card.pos:hover,.card.top10:hover{transform:scale(1.08);z-index:8}
+.card.pos:hover .poster img{transform:none}
+.card.top10{grid-column:span 2;flex:none!important;display:flex;align-items:flex-end}
+.card.top10 .tp{flex:0 0 50%}
+.hero+.row{margin-top:-70px}
+.foot{display:none}
+main{min-height:100vh}

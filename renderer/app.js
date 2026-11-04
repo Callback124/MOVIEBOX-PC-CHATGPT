@@ -74,37 +74,43 @@ function pushHistory(item) {
 const toLite = (type, d) => ({ id: d.id, type, title: d.title || d.name, poster: d.poster_path, year: (d.release_date || d.first_air_date || '').slice(0, 4), vote: d.vote_average });
 
 /* ---------- components ---------- */
+const colsNow = () => Math.max(2, Math.min(10, Math.floor((window.innerWidth * 0.92 + 14) / 184)));
+function applyCols() { document.documentElement.style.setProperty('--cols', colsNow()); }
+applyCols();
+let rowFills = [];
+
 function card(item, forced, opts = {}) {
   const type = item.type || item.media_type || forced;
   const title = item.title || item.name;
   const year = item.year ?? (item.release_date || item.first_air_date || '').slice(0, 4);
   const poster = item.poster ?? item.poster_path;
-  const back = item.backdrop ?? item.backdrop_path;
   const vote = item.vote ?? item.vote_average;
-  const g = item.genre_ids && genreMap ? genreMap[item.genre_ids[0]] || '' : '';
   const href = `#/title/${esc(type)}/${item.id}`;
   if (opts.rank) {
     return html(`<a class="card top10" href="${href}"><span class="num">${opts.rank}</span>
       <div class="tp">${poster ? `<img loading="lazy" alt="" src="${esc(img(poster))}">` : ''}</div></a>`);
   }
-  const pic = back ? img(back, 'w500') : (poster ? img(poster, 'w342') : '');
-  return html(`<a class="card wide" href="${href}">
-    <div class="thumb">${pic ? `<img loading="lazy" alt="" src="${esc(pic)}">` : ''}<span class="cap">${esc(title)}</span></div>
-    <div class="peek"><div class="pbtns"><span class="rb play">▶</span><span class="rb">＋</span><span class="rb">⌄</span></div>
-      <div class="pm"><span class="match">${vote ? Math.round(vote * 10) + '% Match' : 'New'}</span><span class="age">${type === 'tv' ? 'Series' : 'Movie'}</span><span>${esc(year)}</span></div>
-      <div class="pg">${esc(g)}</div></div></a>`);
+  return html(`<a class="card pos" href="${href}">
+    <div class="poster">${poster ? `<img loading="lazy" alt="" src="${esc(img(poster))}">` : `<div class="noimg">${esc(title)}</div>`}
+      ${vote ? `<span class="badge rate">★ ${Number(vote).toFixed(1)}</span>` : ''}</div>
+    <div class="t">${esc(title)}</div><div class="s">${esc(year)}</div></a>`);
 }
 
+// A row shows exactly as many cards as fit the screen width (no horizontal scrolling).
 function row(title, items, forced, moreHref, opts = {}) {
-  const sec = html(`<section class="row"><div class="row-head"><h3>${esc(title)}</h3>${moreHref ? `<a href="${moreHref}">Explore all ›</a>` : ''}</div>
-    <div class="rowwrap"><button class="arrow l" aria-label="Previous">‹</button><div class="scroller"></div><button class="arrow r" aria-label="Next">›</button></div></section>`);
+  const sec = html(`<section class="row"><div class="row-head"><h3>${esc(title)}</h3>${moreHref ? `<a href="${moreHref}">Explore all ›</a>` : ''}</div><div class="scroller"></div></section>`);
   const sc = $('.scroller', sec);
-  let n = 0;
-  items.filter((i) => i.backdrop_path || i.poster_path || i.poster).slice(0, opts.limit || 40).forEach((i) => { n++; sc.appendChild(card(i, forced, opts.top ? { rank: n } : {})); });
-  $('.arrow.l', sec).onclick = () => sc.scrollBy({ left: -sc.clientWidth * 0.85, behavior: 'smooth' });
-  $('.arrow.r', sec).onclick = () => sc.scrollBy({ left: sc.clientWidth * 0.85, behavior: 'smooth' });
+  const list = items.filter((i) => i.poster_path || i.poster);
+  const fill = () => {
+    sc.innerHTML = '';
+    const n = opts.top ? Math.max(2, Math.floor(colsNow() / 2)) : colsNow();
+    list.slice(0, n).forEach((i, k) => sc.appendChild(card(i, forced, opts.top ? { rank: k + 1 } : {})));
+  };
+  fill(); rowFills.push(fill);
   return sec;
 }
+let resizeT;
+window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { applyCols(); rowFills.forEach((f) => f()); }, 120); });
 
 function showError(e) {
   if (e.message === 'NO_KEY' || e.message === 'BAD_KEY') {
@@ -155,6 +161,7 @@ function openSettings() {
     <select id="s-lang">${langs.map(([v, n]) => `<option value="${v}" ${v === lang ? 'selected' : ''}>${n}</option>`).join('')}</select>
     <label class="field" for="s-reg">Region (for "where to watch")</label>
     <select id="s-reg">${regs.map(([v, n]) => `<option value="${v}" ${v === reg ? 'selected' : ''}>${n}</option>`).join('')}</select>
+    <p class="note"><b>About:</b> This product uses the TMDB API but is not endorsed or certified by TMDB. Streaming availability data provided by JustWatch. Music previews and artwork provided by Apple.</p>
     <p class="note">Your key is stored only on this computer. Get a free key at themoviedb.org → Settings → API.</p>
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px"><button class="btn" id="s-clear">Clear history</button><button class="btn primary" id="s-save">Save</button></div>`, 'small');
   $('#s-save').onclick = () => {
@@ -202,17 +209,28 @@ async function homeView() {
   heroTimer = setInterval(() => { if (!document.hidden && slides.length) go((cur + 1) % slides.length); }, 7000);
   view.appendChild(hero);
   const t10 = trend.results.filter((x) => x.media_type !== 'person' && x.poster_path);
-  view.appendChild(row('Top 10 Today', t10, null, null, { top: true, limit: 10 }));
-  view.appendChild(row('Trending Now', trend.results.filter((x) => x.media_type !== 'person'), null));
-  view.appendChild(row('Popular Movies', pm.results, 'movie', '#/browse/movie'));
-  view.appendChild(row('Popular TV Shows', ptv.results, 'tv', '#/browse/tv'));
-  view.appendChild(row('Hindi Movies', hindi.results, 'movie', '#/browse/hindi'));
-  view.appendChild(row('Anime Series', anime.results, 'tv', '#/browse/anime'));
-  view.appendChild(row('Top Rated Movies', top.results, 'movie'));
-  view.appendChild(row('Coming Soon', up.results, 'movie'));
+  view.appendChild(row('Top 10 Today', t10, null, '#/browse/trending/0', { top: true }));
+  view.appendChild(row('Trending Now', trend.results.filter((x) => x.media_type !== 'person'), null, '#/browse/trending/1'));
+  view.appendChild(row('Popular Movies', pm.results, 'movie', '#/browse/movie/0'));
+  view.appendChild(row('Popular TV Shows', ptv.results, 'tv', '#/browse/tv/0'));
+  view.appendChild(row('Hindi Movies', hindi.results, 'movie', '#/browse/regional/0'));
+  view.appendChild(row('Anime Series', anime.results, 'tv', '#/browse/anime/0'));
+  view.appendChild(row('Top Rated Movies', top.results, 'movie', '#/browse/movie/1'));
+  view.appendChild(row('Coming Soon', up.results, 'movie', '#/browse/movie/3'));
 }
 
 const BROWSE = {
+  trending: { title: 'Trending', cats: [['Today', '/trending/all/day', {}, null], ['This Week', '/trending/all/week', {}, null]] },
+  movie: { title: 'Movies', cats: [
+    ['Popular', '/movie/popular', {}, 'movie'], ['Top Rated', '/movie/top_rated', {}, 'movie'],
+    ['Now Playing', '/movie/now_playing', { region: 'IN' }, 'movie'], ['Upcoming', '/movie/upcoming', { region: 'IN' }, 'movie']] },
+  tv: { title: 'TV Shows', cats: [
+    ['Popular', '/tv/popular', {}, 'tv'], ['Top Rated', '/tv/top_rated', {}, 'tv'],
+    ['On The Air', '/tv/on_the_air', {}, 'tv'], ['Airing Today', '/tv/airing_today', {}, 'tv']] },
+  anime: { title: 'Anime', cats: [
+    ['Popular Series', '/discover/tv', { with_genres: 16, with_original_language: 'ja', sort_by: 'popularity.desc' }, 'tv'],
+    ['Top Rated Series', '/discover/tv', { with_genres: 16, with_original_language: 'ja', sort_by: 'vote_average.desc', 'vote_count.gte': 300 }, 'tv'],
+    ['Anime Movies', '/discover/movie', { with_genres: 16, with_original_language: 'ja', sort_by: 'popularity.desc' }, 'movie']] },
   short: { title: 'Short TV', cats: [
     ['Quick Watch (under 15 min)', '/discover/tv', { 'with_runtime.lte': 15, 'with_runtime.gte': 1, sort_by: 'popularity.desc', 'vote_count.gte': 5 }, 'tv'],
     ['Under 30 min', '/discover/tv', { 'with_runtime.lte': 30, 'with_runtime.gte': 1, sort_by: 'popularity.desc', 'vote_count.gte': 20 }, 'tv'],
@@ -254,7 +272,7 @@ async function browseView(kind, catIdx = 0) {
     try {
       const d = await api(path, { ...params, page });
       total = Math.min(d.total_pages, 500); page++;
-      d.results.filter((x) => x.backdrop_path || x.poster_path).forEach((x) => grid.appendChild(card(x, type)));
+      d.results.filter((x) => x.poster_path && x.media_type !== 'person').forEach((x) => grid.appendChild(card(x, type)));
       more.innerHTML = page <= total ? '<button class="btn" id="lm">Load more</button>' : '';
       if ($('#lm')) $('#lm').onclick = load;
     } catch (e) { more.textContent = e.message; }
@@ -289,7 +307,7 @@ async function searchView(q) {
       try {
         const d = await api('/search/multi', { query: text, page, include_adult: 'false' });
         total = d.total_pages; page++;
-        d.results.filter((x) => x.media_type !== 'person' && (x.backdrop_path || x.poster_path)).forEach((x) => { grid.appendChild(card(x)); count++; });
+        d.results.filter((x) => x.media_type !== 'person' && x.poster_path).forEach((x) => { grid.appendChild(card(x)); count++; });
         more.innerHTML = page <= total ? '<button class="btn" id="lm">Load more</button>' : (count ? '' : 'No results found.');
         if ($('#lm')) $('#lm').onclick = load;
       } catch (e) { more.textContent = e.message; }
@@ -459,11 +477,11 @@ function setTab(name) {
   document.querySelectorAll('#tabs a').forEach((a) => a.classList.toggle('active', a.dataset.tab === name));
 }
 async function route() {
-  clearInterval(heroTimer);
+  clearInterval(heroTimer); rowFills = [];
   const [, a, b, c] = (location.hash || '#/home').split('/');
   window.scrollTo(0, 0);
   try {
-    if (a === 'browse') { setTab(b); await browseView(b); }
+    if (a === 'browse') { setTab(b); await browseView(b, Math.max(0, parseInt(c, 10) || 0)); }
     else if (a === 'music') { setTab('music'); await musicView(b ? decodeURIComponent(b) : ''); }
     else if (a === 'search') { setTab(''); await searchView(b ? decodeURIComponent(b) : ''); }
     else if (a === 'title') { setTab(''); await detailView(b, c); }
