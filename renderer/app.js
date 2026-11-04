@@ -256,6 +256,46 @@ const BROWSE = {
     ['Hulu', '/discover/tv', { with_networks: 453, sort_by: 'popularity.desc' }, 'tv']] }
 };
 
+
+/* ---------- infinite grid: fills the screen, loads more as you scroll ---------- */
+let stopInf = null;
+function infinite(grid, more, fetchPage, mk) {
+  if (stopInf) stopInf();
+  let page = 1, total = 1, loading = false, done = false, count = 0, dead = false;
+  const buf = [];
+  async function step() {
+    if (loading || dead) return;
+    loading = true;
+    try {
+      for (;;) {
+        const cols = colsNow();
+        // only place whole rows so the last row is never half-empty (until the very end)
+        const n = done ? buf.length : buf.length - (buf.length % cols);
+        if (n > 0) buf.splice(0, n).forEach((x) => { grid.appendChild(mk(x)); count++; });
+        const need = more.getBoundingClientRect().top < window.innerHeight + 500;
+        if (!need || (done && !buf.length)) break;
+        if (!done) {
+          more.innerHTML = '<div class="spinner"></div>';
+          const d = await fetchPage(page);
+          if (dead) return;
+          total = Math.min(d.total_pages || 1, 500); page++;
+          if (page > total) done = true;
+          buf.push(...d.items);
+        }
+      }
+      more.innerHTML = done && !count ? 'No results found.' : '';
+    } catch (e) { more.textContent = e.message; done = true; }
+    loading = false;
+    if (done && !buf.length) stop();
+  }
+  const onScroll = () => step();
+  function stop() { dead = true; window.removeEventListener('scroll', onScroll); window.removeEventListener('resize', onScroll); if (stopInf === stop) stopInf = null; }
+  stopInf = stop;
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onScroll);
+  step();
+}
+
 async function browseView(kind, catIdx = 0) {
   const cfg = BROWSE[kind]; if (!cfg) return (location.hash = '#/home');
   await genres();
@@ -266,21 +306,11 @@ async function browseView(kind, catIdx = 0) {
     b.onclick = () => browseView(kind, i); cats.appendChild(b);
   });
   const [, path, params, type] = cfg.cats[catIdx];
-  let page = 1, total = 1, loading = false;
   const grid = $('#grid'), more = $('#more');
-  async function load() {
-    if (loading || page > total) return; loading = true;
-    more.innerHTML = '<div class="spinner"></div>';
-    try {
-      const d = await api(path, { ...params, page });
-      total = Math.min(d.total_pages, 500); page++;
-      d.results.filter((x) => x.poster_path && x.media_type !== 'person').forEach((x) => grid.appendChild(card(x, type)));
-      more.innerHTML = page <= total ? '<button class="btn" id="lm">Load more</button>' : '';
-      if ($('#lm')) $('#lm').onclick = load;
-    } catch (e) { more.textContent = e.message; }
-    loading = false;
-  }
-  load();
+  infinite(grid, more, async (page) => {
+    const d = await api(path, { ...params, page });
+    return { total_pages: d.total_pages, items: d.results.filter((x) => x.poster_path && x.media_type !== 'person') };
+  }, (x) => card(x, type));
 }
 
 async function searchView(q) {
@@ -303,18 +333,11 @@ async function searchView(q) {
     const r = [text, ...recents().filter((x) => x.toLowerCase() !== text.toLowerCase())].slice(0, 12); store.set('recents', r);
     out.innerHTML = `<div class="section-head"><h3>Results for "${esc(text)}"</h3></div><div class="grid" id="grid"></div><div class="center" id="more" style="min-height:90px"></div>`;
     await genres();
-    let page = 1, total = 1; const grid = $('#grid'), more = $('#more'); let count = 0;
-    async function load() {
-      more.innerHTML = '<div class="spinner"></div>';
-      try {
-        const d = await api('/search/multi', { query: text, page, include_adult: 'false' });
-        total = d.total_pages; page++;
-        d.results.filter((x) => x.media_type !== 'person' && x.poster_path).forEach((x) => { grid.appendChild(card(x)); count++; });
-        more.innerHTML = page <= total ? '<button class="btn" id="lm">Load more</button>' : (count ? '' : 'No results found.');
-        if ($('#lm')) $('#lm').onclick = load;
-      } catch (e) { more.textContent = e.message; }
-    }
-    load();
+    const grid = $('#grid'), more = $('#more');
+    infinite(grid, more, async (page) => {
+      const d = await api('/search/multi', { query: text, page, include_adult: 'false' });
+      return { total_pages: d.total_pages, items: d.results.filter((x) => x.media_type !== 'person' && x.poster_path) };
+    }, (x) => card(x));
   }
   let t;
   input.addEventListener('input', () => {
@@ -479,7 +502,7 @@ function setTab(name) {
   document.querySelectorAll('#tabs a').forEach((a) => a.classList.toggle('active', a.dataset.tab === name));
 }
 async function route() {
-  clearInterval(heroTimer); rowFills = [];
+  clearInterval(heroTimer); rowFills = []; if (stopInf) stopInf();
   const [, a, b, c] = (location.hash || '#/home').split('/');
   window.scrollTo(0, 0);
   try {
