@@ -74,7 +74,8 @@ function pushHistory(item) {
 const toLite = (type, d) => ({ id: d.id, type, title: d.title || d.name, poster: d.poster_path, year: (d.release_date || d.first_air_date || '').slice(0, 4), vote: d.vote_average });
 
 /* ---------- components ---------- */
-const colsNow = () => Math.max(2, Math.min(10, Math.floor((window.innerWidth * 0.92 + 14) / 184)));
+// at least 10 cards per line; more on wider screens (~100px minimum card width)
+const colsNow = () => Math.max(10, Math.min(18, Math.floor((window.innerWidth * 0.92 + 10) / 110)));
 function applyCols() { document.documentElement.style.setProperty('--cols', colsNow()); }
 applyCols();
 let rowFills = [];
@@ -100,10 +101,11 @@ function card(item, forced, opts = {}) {
 function row(title, items, forced, moreHref, opts = {}) {
   const sec = html(`<section class="row"><div class="row-head"><h3>${esc(title)}</h3>${moreHref ? `<a href="${moreHref}">Explore all ›</a>` : ''}</div><div class="scroller"></div></section>`);
   const sc = $('.scroller', sec);
+  if (opts.top) sc.classList.add('toprow');
   const list = items.filter((i) => i.poster_path || i.poster);
   const fill = () => {
     sc.innerHTML = '';
-    const n = opts.top ? Math.max(2, Math.floor(colsNow() / 2)) : colsNow();
+    const n = opts.top ? 10 : colsNow();
     list.slice(0, n).forEach((i, k) => sc.appendChild(card(i, forced, opts.top ? { rank: k + 1 } : {})));
   };
   fill(); rowFills.push(fill);
