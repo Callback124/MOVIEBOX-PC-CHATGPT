@@ -1,0 +1,8 @@
+{
+  "appId": "com.example.moviebox.tv",
+  "appName": "MovieBox",
+  "webDir": "www",
+  "backgroundColor": "#141414",
+  "server": { "androidScheme": "https" },
+  "android": { "allowMixedContent": false }
+}

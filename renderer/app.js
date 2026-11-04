@@ -127,14 +127,22 @@ function showError(e) {
 
 /* ---------- modal ---------- */
 const modal = $('#modal');
+let modalPushed = false;
 function openModal(inner, cls = '') {
   modal.innerHTML = `<div class="box ${cls}"><button class="close" aria-label="Close">✕</button>${inner}</div>`;
   modal.classList.remove('hidden');
-  $('.close', modal).onclick = closeModal;
+  $('.close', modal).onclick = () => closeModal();
+  if (!modalPushed) { try { history.pushState({ m: 1 }, ''); modalPushed = true; } catch { /* ignore */ } }
+  const first = $('.box input, .box select, .box .close', modal); if (first) first.focus();
 }
-function closeModal() { modal.classList.add('hidden'); modal.innerHTML = ''; }
+function closeModal(fromPop) {
+  modal.classList.add('hidden'); modal.innerHTML = '';
+  if (modalPushed) { modalPushed = false; if (!fromPop) history.back(); }
+}
+// TV remote / Android Back button closes the popup instead of leaving the page
+window.addEventListener('popstate', () => { if (modalPushed) closeModal(true); });
 modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+document.addEventListener('keydown', (e) => { if ((e.key === 'Escape' || e.key === 'GoBack') && modalPushed) closeModal(); });
 
 function playTrailer(videoKey) {
   openModal(`<div class="video"><iframe allowfullscreen allow="autoplay; encrypted-media; picture-in-picture; fullscreen" referrerpolicy="strict-origin-when-cross-origin" src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoKey)}?autoplay=1&rel=0"></iframe></div>`);
@@ -488,7 +496,7 @@ async function musicView(q) {
     tracks.innerHTML = queue.length ? '' : '<div class="center">No songs found.</div>';
     queue.forEach((t, i) => {
       const row = html(`<div class="trk"><span class="n">${i + 1}</span><img loading="lazy" alt="" src="${esc(t.art)}"><div class="ti"><b>${esc(t.name)}</b><small>${esc(t.artist)}</small></div><span class="pbtn">▶</span></div>`);
-      row.onclick = () => playAt(i); tracks.appendChild(row);
+      row.tabIndex = 0; row.onclick = () => playAt(i); row.onkeydown = (e) => { if (e.key === 'Enter') playAt(i); }; tracks.appendChild(row);
     });
   } catch (e) { tracks.innerHTML = `<div class="center">${esc(e.message)}</div>`; }
 }

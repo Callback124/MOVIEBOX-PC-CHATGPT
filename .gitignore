@@ -1,2 +1,5 @@
 node_modules/
 dist/
+android-tv/node_modules/
+android-tv/www/
+android-tv/android/

@@ -1,4 +1,4 @@
-# MovieBox desktop app (TMDB + Apple previews)
+# MovieBox (TMDB + Apple previews): Windows exe + Android TV apk
 
 Tabs: Home, Short TV, Regional, Originals, Music.
 
@@ -19,3 +19,6 @@ Click the gear icon and paste your free TMDB API key (themoviedb.org -> Settings
 `npm install` then `npm start`.
 
 Attribution: movie/TV data and images from TMDB; streaming availability from JustWatch; music previews and artwork from Apple.
+
+## Android TV apk
+Built automatically with the exe: Releases -> MovieBox-TV.apk. Sideload on the TV (Downloader app / USB / adb install). Works with the TV remote (D-pad, OK, Back).

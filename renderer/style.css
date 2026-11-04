@@ -285,3 +285,11 @@ main{min-height:100vh}
 .card.pos:hover .poster,.card.top10:hover .tp{outline:2px solid #fff;outline-offset:-2px}
 .card.pos .poster,.card.top10 .tp{position:relative}
 .card.pos:hover .poster::after,.card.top10:hover .tp::after{content:"";position:absolute;inset:0;border:2px solid #fff;pointer-events:none;z-index:3}
+
+/* ===== TV remote / keyboard focus ===== */
+a:focus,button:focus,input:focus,select:focus{outline:none}
+a:focus-visible,button:focus-visible,select:focus-visible,.trk:focus-visible{outline:3px solid #fff;outline-offset:2px}
+.card.pos:focus-visible,.card.top10:focus-visible{transform:scale(1.12);z-index:8;outline:none}
+.card.pos:focus-visible .poster,.card.top10:focus-visible .tp{outline:3px solid #fff;outline-offset:-3px}
+.trk{outline-offset:-3px}
+html{scroll-padding-top:90px;scroll-padding-bottom:60px}

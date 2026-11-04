@@ -1,4 +1,4 @@
-name: Build MovieBox.exe
+name: Build MovieBox (Windows exe + Android TV apk)
 on:
   push:
     branches: ['**']
@@ -6,7 +6,7 @@ on:
 permissions:
   contents: write
 jobs:
-  build:
+  exe:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -14,9 +14,40 @@ jobs:
         with: { node-version: 20 }
       - run: npm install
       - run: npm run dist
-      # Always-available download link: Releases -> "latest" -> MovieBox.exe
+      - uses: actions/upload-artifact@v4
+        with: { name: MovieBox-exe, path: dist/MovieBox.exe }
+
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - name: Build Android TV apk
+        working-directory: android-tv
+        run: |
+          npm install
+          rm -rf www && mkdir www && cp -r ../renderer/* www/
+          npx cap add android
+          node patch-android.js
+          npx cap sync android
+          cd android && chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+          cp app/build/outputs/apk/debug/app-debug.apk ../MovieBox-TV.apk
+      - uses: actions/upload-artifact@v4
+        with: { name: MovieBox-TV-apk, path: android-tv/MovieBox-TV.apk }
+
+  release:
+    needs: [exe, apk]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: out, merge-multiple: true }
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
           name: MovieBox (latest build)
-          files: dist/MovieBox.exe
+          files: |
+            out/MovieBox.exe
+            out/MovieBox-TV.apk
