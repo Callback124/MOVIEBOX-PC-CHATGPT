@@ -13,16 +13,16 @@ v=[x for x in v if re.fullmatch(r'\d+\.\d+\.\d+',x)]
 print(max(v,key=lambda s:tuple(map(int,s.split('.')))))") || LATEST=""
 echo "Latest stable Media3: ${LATEST:-unknown}"
 
-build() { # $1 = media3 version, $2 = compileSdk, $3 = AGP (optional), $4 = Gradle (optional)
+build() { # $1 = media3 version, $2 = compileSdk, $3 = AGP (optional), $4 = Gradle (optional), $5 = minSdk (optional)
   rm -rf android www && mkdir www && cp -r ../renderer/* www/ \
   && npx cap add android \
-  && MEDIA3="$1" COMPILE_SDK="$2" AGP="${3:-}" GRADLE="${4:-}" node patch-android.js \
+  && MEDIA3="$1" COMPILE_SDK="$2" AGP="${3:-}" GRADLE="${4:-}" MIN_SDK="${5:-}" node patch-android.js \
   && npx cap sync android \
   && (cd android && chmod +x gradlew && ./gradlew assembleDebug --no-daemon)
 }
 
 USED=""
-if [ -n "$LATEST" ] && build "$LATEST" 36 8.10.1 8.11.1; then USED="$LATEST"
+if [ -n "$LATEST" ] && build "$LATEST" 36 8.10.1 8.11.1 23; then USED="$LATEST"
 else
   echo "::warning::Build with Media3 ${LATEST:-latest} failed, falling back to 1.4.1"
   build 1.4.1 34

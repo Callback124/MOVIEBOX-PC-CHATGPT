@@ -54,6 +54,7 @@ if (compile) {
   const vg = path.join(__dirname, 'android', 'variables.gradle');
   let v = fs.readFileSync(vg, 'utf8');
   must(/compileSdkVersion = \d+/.test(v) && /targetSdkVersion = \d+/.test(v), 'variables.gradle fields not found');
+  if (process.env.MIN_SDK) v = v.replace(/minSdkVersion = \d+/, 'minSdkVersion = ' + process.env.MIN_SDK);
   v = v.replace(/compileSdkVersion = \d+/, 'compileSdkVersion = ' + compile).replace(/targetSdkVersion = \d+/, 'targetSdkVersion = ' + compile);
   fs.writeFileSync(vg, v);
   fs.appendFileSync(path.join(__dirname, 'android', 'gradle.properties'), '\nandroid.suppressUnsupportedCompileSdk=' + compile + '\n');
