@@ -58,5 +58,20 @@ if (compile) {
   fs.writeFileSync(vg, v);
   fs.appendFileSync(path.join(__dirname, 'android', 'gradle.properties'), '\nandroid.suppressUnsupportedCompileSdk=' + compile + '\n');
 }
+// newer Media3 needs a newer Android Gradle Plugin + Gradle wrapper (optional, via env)
+if (process.env.AGP) {
+  const bg = path.join(__dirname, 'android', 'build.gradle');
+  let b = fs.readFileSync(bg, 'utf8');
+  must(/com\.android\.tools\.build:gradle:[\d.]+/.test(b), 'AGP classpath not found');
+  b = b.replace(/com\.android\.tools\.build:gradle:[\d.]+/, 'com.android.tools.build:gradle:' + process.env.AGP);
+  fs.writeFileSync(bg, b);
+}
+if (process.env.GRADLE) {
+  const wp = path.join(__dirname, 'android', 'gradle', 'wrapper', 'gradle-wrapper.properties');
+  let w = fs.readFileSync(wp, 'utf8');
+  must(/gradle-[\d.]+-(bin|all)\.zip/.test(w), 'gradle wrapper url not found');
+  w = w.replace(/gradle-[\d.]+-(bin|all)\.zip/, 'gradle-' + process.env.GRADLE + '-bin.zip');
+  fs.writeFileSync(wp, w);
+}
 console.log('Media3 ExoPlayer ' + media3 + ' added');
 console.log('Android TV patch applied');
