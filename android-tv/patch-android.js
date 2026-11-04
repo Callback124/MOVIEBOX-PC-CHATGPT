@@ -30,4 +30,33 @@ for (const d of fs.readdirSync(res)) {
     }
   }
 }
+
+// 4) native Media3 ExoPlayer screen + plugin
+const cfg = JSON.parse(fs.readFileSync(path.join(__dirname, 'capacitor.config.json'), 'utf8'));
+const javaDir = path.join(root, 'java', ...cfg.appId.split('.'));
+must(fs.existsSync(javaDir), 'java package dir not found: ' + javaDir);
+for (const f of ['MainActivity.java', 'ExoPlayerPlugin.java', 'PlayerActivity.java']) {
+  fs.copyFileSync(path.join(__dirname, 'native', f), path.join(javaDir, f));
+}
+let m2 = fs.readFileSync(mf, 'utf8');
+must(/<\/application>/.test(m2), '</application> not found');
+m2 = m2.replace(/<\/application>/, '    <activity android:name=".PlayerActivity" android:exported="false" android:screenOrientation="landscape"\n            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|smallestScreenSize|screenLayout|uiMode"\n            android:theme="@android:style/Theme.NoTitleBar.Fullscreen" />\n    </application>');
+fs.writeFileSync(mf, m2);
+
+const media3 = process.env.MEDIA3 || '1.4.1';
+const gradle = path.join(__dirname, 'android', 'app', 'build.gradle');
+let g = fs.readFileSync(gradle, 'utf8');
+must(/^dependencies \{/m.test(g), 'dependencies block not found in app/build.gradle');
+g = g.replace(/^dependencies \{/m, 'dependencies {\n    implementation "androidx.media3:media3-exoplayer:' + media3 + '"\n    implementation "androidx.media3:media3-exoplayer-hls:' + media3 + '"\n    implementation "androidx.media3:media3-exoplayer-dash:' + media3 + '"\n    implementation "androidx.media3:media3-ui:' + media3 + '"');
+fs.writeFileSync(gradle, g);
+const compile = process.env.COMPILE_SDK;
+if (compile) {
+  const vg = path.join(__dirname, 'android', 'variables.gradle');
+  let v = fs.readFileSync(vg, 'utf8');
+  must(/compileSdkVersion = \d+/.test(v) && /targetSdkVersion = \d+/.test(v), 'variables.gradle fields not found');
+  v = v.replace(/compileSdkVersion = \d+/, 'compileSdkVersion = ' + compile).replace(/targetSdkVersion = \d+/, 'targetSdkVersion = ' + compile);
+  fs.writeFileSync(vg, v);
+  fs.appendFileSync(path.join(__dirname, 'android', 'gradle.properties'), '\nandroid.suppressUnsupportedCompileSdk=' + compile + '\n');
+}
+console.log('Media3 ExoPlayer ' + media3 + ' added');
 console.log('Android TV patch applied');

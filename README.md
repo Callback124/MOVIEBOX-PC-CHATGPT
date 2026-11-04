@@ -22,3 +22,8 @@ Attribution: movie/TV data and images from TMDB; streaming availability from Jus
 
 ## Android TV apk
 Built automatically with the exe: Releases -> MovieBox-TV.apk. Sideload on the TV (Downloader app / USB / adb install). Works with the TV remote (D-pad, OK, Back).
+
+## Player
+Tab "Player": Internet Archive free movies, your own files, or any direct/HLS link.
+- Android TV apk: native Media3 ExoPlayer screen (newest stable version is picked at build time; falls back to 1.4.1 if the newest fails to build).
+- Windows exe: built-in HTML5 player (+ latest hls.js for .m3u8). ExoPlayer is Android-only.

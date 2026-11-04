@@ -511,6 +511,7 @@ async function route() {
   window.scrollTo(0, 0);
   try {
     if (a === 'browse') { setTab(b); await browseView(b, Math.max(0, parseInt(c, 10) || 0)); }
+    else if (a === 'player') { setTab('player'); window.MB_playerView(view); }
     else if (a === 'music') { setTab('music'); await musicView(b ? decodeURIComponent(b) : ''); }
     else if (a === 'search') { setTab(''); await searchView(b ? decodeURIComponent(b) : ''); }
     else if (a === 'title') { setTab(''); await detailView(b, c); }

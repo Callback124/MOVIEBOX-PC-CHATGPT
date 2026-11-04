@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https://image.tmdb.org https://*.mzstatic.com data:; media-src https://*.mzstatic.com; frame-src https://www.youtube-nocookie.com; connect-src 'self' https://api.themoviedb.org https://itunes.apple.com https://rss.applemarketingtools.com; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https: data: blob:; media-src 'self' https: http: blob: data:; connect-src 'self' https:; frame-src https://www.youtube-nocookie.com; style-src 'self' 'unsafe-inline'; script-src 'self'">
 <title>MovieBox</title>
 <link rel="stylesheet" href="style.css">
 </head>
@@ -16,6 +16,7 @@
     <a href="#/browse/regional" data-tab="regional">Regional</a>
     <a href="#/browse/originals" data-tab="originals">Originals</a>
     <a href="#/music" data-tab="music">Music</a>
+    <a href="#/player" data-tab="player">Player</a>
   </nav>
   <div class="actions">
     <a class="icon-btn" href="#/search" title="Search" id="btn-search"></a>
@@ -27,6 +28,8 @@
 <main id="view"></main>
 <div id="modal" class="modal hidden"></div>
 <div id="player" class="player hidden"></div>
+<script src="hls.min.js"></script>
+<script src="player.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
