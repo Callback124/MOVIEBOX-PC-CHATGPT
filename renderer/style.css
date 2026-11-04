@@ -280,3 +280,8 @@ main{min-height:100vh}
 .cast{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:14px 10px;overflow:visible!important;padding:4px 4% 10px!important}
 .person{flex:none!important;text-align:left}
 .person .av{width:100%!important;height:auto!important;aspect-ratio:1/1;margin:0 0 6px!important}
+
+/* hover: white border on every card, like Top 10 */
+.card.pos:hover .poster,.card.top10:hover .tp{outline:2px solid #fff;outline-offset:-2px}
+.card.pos .poster,.card.top10 .tp{position:relative}
+.card.pos:hover .poster::after,.card.top10:hover .tp::after{content:"";position:absolute;inset:0;border:2px solid #fff;pointer-events:none;z-index:3}

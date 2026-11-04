@@ -361,14 +361,11 @@ async function detailView(type, id) {
   if (!['movie', 'tv'].includes(type)) return (location.hash = '#/home');
   view.innerHTML = spinner;
   const lang = store.get('lang', 'en-US').slice(0, 2);
-  const d = await api(`/${type}/${id}`, { append_to_response: 'videos,credits,recommendations,watch/providers', include_video_language: `${lang},en,null` });
+  const d = await api(`/${type}/${id}`, { append_to_response: 'videos,credits,recommendations', include_video_language: `${lang},en,null` });
   const title = d.title || d.name, year = (d.release_date || d.first_air_date || '').slice(0, 4);
   const lite = toLite(type, d); pushHistory(lite);
   const runtime = d.runtime || (d.episode_run_time && d.episode_run_time[0]);
-  const prov = d['watch/providers']?.results?.[region()];
-  const provHtml = prov ? [['flatrate', 'Stream'], ['rent', 'Rent'], ['buy', 'Buy']].filter(([k]) => prov[k]?.length).map(([k, label]) =>
-    `<div class="h-sm" style="margin-top:12px">${label}</div><div class="providers">${prov[k].map((p) => `<span class="prov"><img alt="" src="${esc(img(p.logo_path, 'w92'))}">${esc(p.provider_name)}</span>`).join('')}</div>`).join('') +
-    (prov.link ? `<p class="note"><a href="${esc(prov.link)}" target="_blank" rel="noopener" style="text-decoration:underline">Open on JustWatch ↗</a></p>` : '') : '<p class="note">No streaming info for your region.</p>';
+
   const trailerKey = (d.videos?.results || []).filter((v) => v.site === 'YouTube').sort((a, b) => (b.type === 'Trailer') - (a.type === 'Trailer'))[0]?.key;
 
   view.innerHTML = '';
@@ -390,7 +387,6 @@ async function detailView(type, id) {
         <h3 class="h-sm">Synopsis</h3><p>${esc(d.overview || 'No synopsis available.')}</p>
         <h3 class="h-sm">Audio / Languages</h3>
         <div class="chips" style="padding:0">${(d.spoken_languages || []).map((l) => `<span class="chip sm">${esc(l.english_name)}</span>`).join('') || '<span class="note">Unknown</span>'}</div>
-        <h3 class="h-sm">Where to watch (${esc(region())})</h3>${provHtml}
       </div>
     </div>
     <h3 class="h-sm pad" style="margin-top:30px">Cast &amp; Crew</h3><div class="cast" id="cast"></div>
