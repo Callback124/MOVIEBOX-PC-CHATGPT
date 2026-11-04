@@ -1,0 +1,476 @@
+'use strict';
+/* ---------- helpers ---------- */
+const IMG = 'https://image.tmdb.org/t/p/';
+const $ = (s, r = document) => r.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const html = (h) => { const t = document.createElement('template'); t.innerHTML = h.trim(); return t.content.firstElementChild; };
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* ignore */ } }
+};
+const ICON = {
+  search: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+  list: '<svg viewBox="0 0 24 24"><path d="M5 4h14v17l-7-4-7 4z"/></svg>',
+  history: '<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg>',
+  gear: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>'
+};
+$('#btn-search').innerHTML = ICON.search;
+$('#btn-list').innerHTML = ICON.list;
+$('#btn-history').innerHTML = ICON.history;
+$('#btn-settings').innerHTML = ICON.gear;
+
+const view = $('#view');
+const spinner = '<div class="center"><div class="spinner"></div></div>';
+
+/* ---------- TMDB client ---------- */
+const cache = new Map();
+async function api(path, params = {}) {
+  const key = (store.get('key', '') || '').trim();
+  if (!key) throw new Error('NO_KEY');
+  const u = new URL('https://api.themoviedb.org/3' + path);
+  const p = { language: store.get('lang', 'en-US'), ...params };
+  for (const [k, v] of Object.entries(p)) if (v != null && v !== '') u.searchParams.set(k, v);
+  const headers = {};
+  if (key.length > 40) headers.Authorization = 'Bearer ' + key; else u.searchParams.set('api_key', key);
+  const ck = u.toString();
+  if (cache.has(ck)) return cache.get(ck);
+  const r = await fetch(u, { headers });
+  if (r.status === 401) throw new Error('BAD_KEY');
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const data = await r.json();
+  cache.set(ck, data);
+  return data;
+}
+const img = (p, size = 'w342') => (p ? IMG + size + p : '');
+const region = () => store.get('region', 'IN');
+
+let genreMap = null;
+async function genres() {
+  if (genreMap) return genreMap;
+  genreMap = {};
+  try {
+    const [m, t] = await Promise.all([api('/genre/movie/list'), api('/genre/tv/list')]);
+    [...m.genres, ...t.genres].forEach((g) => { genreMap[g.id] = g.name; });
+  } catch { /* non-fatal */ }
+  return genreMap;
+}
+
+/* ---------- local lists ---------- */
+const myList = {
+  all: () => store.get('mylist', []),
+  has: (type, id) => myList.all().some((x) => x.id === id && x.type === type),
+  toggle(item) {
+    let a = myList.all();
+    if (myList.has(item.type, item.id)) a = a.filter((x) => !(x.id === item.id && x.type === item.type));
+    else a.unshift(item);
+    store.set('mylist', a);
+  }
+};
+function pushHistory(item) {
+  let a = store.get('history', []).filter((x) => !(x.id === item.id && x.type === item.type));
+  a.unshift(item);
+  store.set('history', a.slice(0, 60));
+}
+const toLite = (type, d) => ({ id: d.id, type, title: d.title || d.name, poster: d.poster_path, year: (d.release_date || d.first_air_date || '').slice(0, 4), vote: d.vote_average });
+
+/* ---------- components ---------- */
+function card(item, forced, opts = {}) {
+  const type = item.type || item.media_type || forced;
+  const title = item.title || item.name;
+  const year = item.year ?? (item.release_date || item.first_air_date || '').slice(0, 4);
+  const poster = item.poster ?? item.poster_path;
+  const back = item.backdrop ?? item.backdrop_path;
+  const vote = item.vote ?? item.vote_average;
+  const g = item.genre_ids && genreMap ? genreMap[item.genre_ids[0]] || '' : '';
+  const href = `#/title/${esc(type)}/${item.id}`;
+  if (opts.rank) {
+    return html(`<a class="card top10" href="${href}"><span class="num">${opts.rank}</span>
+      <div class="tp">${poster ? `<img loading="lazy" alt="" src="${esc(img(poster))}">` : ''}</div></a>`);
+  }
+  const pic = back ? img(back, 'w500') : (poster ? img(poster, 'w342') : '');
+  return html(`<a class="card wide" href="${href}">
+    <div class="thumb">${pic ? `<img loading="lazy" alt="" src="${esc(pic)}">` : ''}<span class="cap">${esc(title)}</span></div>
+    <div class="peek"><div class="pbtns"><span class="rb play">▶</span><span class="rb">＋</span><span class="rb">⌄</span></div>
+      <div class="pm"><span class="match">${vote ? Math.round(vote * 10) + '% Match' : 'New'}</span><span class="age">${type === 'tv' ? 'Series' : 'Movie'}</span><span>${esc(year)}</span></div>
+      <div class="pg">${esc(g)}</div></div></a>`);
+}
+
+function row(title, items, forced, moreHref, opts = {}) {
+  const sec = html(`<section class="row"><div class="row-head"><h3>${esc(title)}</h3>${moreHref ? `<a href="${moreHref}">Explore all ›</a>` : ''}</div>
+    <div class="rowwrap"><button class="arrow l" aria-label="Previous">‹</button><div class="scroller"></div><button class="arrow r" aria-label="Next">›</button></div></section>`);
+  const sc = $('.scroller', sec);
+  let n = 0;
+  items.filter((i) => i.backdrop_path || i.poster_path || i.poster).slice(0, opts.limit || 40).forEach((i) => { n++; sc.appendChild(card(i, forced, opts.top ? { rank: n } : {})); });
+  $('.arrow.l', sec).onclick = () => sc.scrollBy({ left: -sc.clientWidth * 0.85, behavior: 'smooth' });
+  $('.arrow.r', sec).onclick = () => sc.scrollBy({ left: sc.clientWidth * 0.85, behavior: 'smooth' });
+  return sec;
+}
+
+function showError(e) {
+  if (e.message === 'NO_KEY' || e.message === 'BAD_KEY') {
+    view.innerHTML = `<div class="center"><div><h2>${e.message === 'NO_KEY' ? 'Add your TMDB API key' : 'TMDB API key was rejected'}</h2>
+      <p>Create a free account at themoviedb.org, open Settings → API, and paste your API key (or Read Access Token) here.</p>
+      <button class="btn primary" id="open-set">Open settings</button></div></div>`;
+    $('#open-set').onclick = openSettings;
+  } else {
+    view.innerHTML = `<div class="center"><div><h2>Something went wrong</h2><p>${esc(e.message)}</p><button class="btn" onclick="location.reload()">Retry</button></div></div>`;
+  }
+}
+
+/* ---------- modal ---------- */
+const modal = $('#modal');
+function openModal(inner, cls = '') {
+  modal.innerHTML = `<div class="box ${cls}"><button class="close" aria-label="Close">✕</button>${inner}</div>`;
+  modal.classList.remove('hidden');
+  $('.close', modal).onclick = closeModal;
+}
+function closeModal() { modal.classList.add('hidden'); modal.innerHTML = ''; }
+modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+
+function playTrailer(videoKey) {
+  openModal(`<div class="video"><iframe allowfullscreen allow="autoplay; encrypted-media; picture-in-picture; fullscreen" referrerpolicy="strict-origin-when-cross-origin" src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoKey)}?autoplay=1&rel=0"></iframe></div>`);
+}
+async function trailerFor(type, id) {
+  const lang = store.get('lang', 'en-US').slice(0, 2);
+  const d = await api(`/${type}/${id}/videos`, { include_video_language: `${lang},en,null` });
+  const yt = (d.results || []).filter((v) => v.site === 'YouTube');
+  return (yt.find((v) => v.type === 'Trailer' && v.official) || yt.find((v) => v.type === 'Trailer') || yt.find((v) => v.type === 'Teaser') || yt[0])?.key;
+}
+async function watchTrailer(type, id) {
+  try {
+    const k = await trailerFor(type, id);
+    if (k) playTrailer(k); else openModal('<div class="center">No trailer available for this title.</div>', 'small');
+  } catch (e) { openModal(`<div class="center">${esc(e.message)}</div>`, 'small'); }
+}
+
+function openSettings() {
+  const lang = store.get('lang', 'en-US'), reg = region();
+  const langs = [['en-US', 'English'], ['hi-IN', 'हिन्दी (Hindi)'], ['ta-IN', 'Tamil'], ['te-IN', 'Telugu'], ['bn-IN', 'Bengali'], ['ml-IN', 'Malayalam'], ['kn-IN', 'Kannada'], ['es-ES', 'Español'], ['fr-FR', 'Français']];
+  const regs = [['IN', 'India'], ['US', 'United States'], ['GB', 'United Kingdom'], ['CA', 'Canada'], ['AU', 'Australia'], ['AE', 'UAE'], ['DE', 'Germany'], ['FR', 'France']];
+  openModal(`<h2 style="margin-top:0">Settings</h2>
+    <label class="field" for="s-key">TMDB API key or Read Access Token</label>
+    <input id="s-key" type="password" autocomplete="off" placeholder="Paste your key" value="${esc(store.get('key', ''))}">
+    <label class="field" for="s-lang">Content language</label>
+    <select id="s-lang">${langs.map(([v, n]) => `<option value="${v}" ${v === lang ? 'selected' : ''}>${n}</option>`).join('')}</select>
+    <label class="field" for="s-reg">Region (for "where to watch")</label>
+    <select id="s-reg">${regs.map(([v, n]) => `<option value="${v}" ${v === reg ? 'selected' : ''}>${n}</option>`).join('')}</select>
+    <p class="note">Your key is stored only on this computer. Get a free key at themoviedb.org → Settings → API.</p>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px"><button class="btn" id="s-clear">Clear history</button><button class="btn primary" id="s-save">Save</button></div>`, 'small');
+  $('#s-save').onclick = () => {
+    store.set('key', $('#s-key').value.trim()); store.set('lang', $('#s-lang').value); store.set('region', $('#s-reg').value);
+    cache.clear(); genreMap = null; closeModal(); route();
+  };
+  $('#s-clear').onclick = () => { store.set('history', []); store.set('recents', []); closeModal(); route(); };
+}
+$('#btn-settings').onclick = openSettings;
+
+/* ---------- views ---------- */
+let heroTimer = null;
+async function homeView() {
+  view.innerHTML = spinner;
+  await genres();
+  const [trend, pm, top, ptv, anime, hindi, up] = await Promise.all([
+    api('/trending/all/day'), api('/movie/popular'), api('/movie/top_rated'), api('/tv/popular'),
+    api('/discover/tv', { with_genres: 16, with_original_language: 'ja', sort_by: 'popularity.desc' }),
+    api('/discover/movie', { with_original_language: 'hi', sort_by: 'popularity.desc', 'vote_count.gte': 50 }),
+    api('/movie/upcoming', { region: region() })
+  ]);
+  view.innerHTML = '';
+  const slides = trend.results.filter((x) => x.backdrop_path && x.media_type !== 'person').slice(0, 7);
+  const hero = html('<div class="hero"><div class="dots"></div></div>');
+  slides.forEach((s, i) => {
+    const type = s.media_type, title = s.title || s.name;
+    const el = html(`<div class="slide ${i === 0 ? 'on' : ''}"><div class="info">
+      <h2>${esc(title)}</h2>
+      <div class="meta"><span class="match">${Math.round(s.vote_average * 10)}% Match</span><span>${esc((s.release_date || s.first_air_date || '').slice(0, 4))}</span><span class="age">HD</span><span>${esc((genreMap[s.genre_ids?.[0]]) || '')}</span></div>
+      <p>${esc(s.overview)}</p>
+      <div class="hbtns"><button class="hb play" data-t="${type}" data-id="${s.id}">▶ Play Trailer</button><a class="hb more" href="#/title/${type}/${s.id}">ⓘ More Info</a></div></div></div>`);
+    el.style.backgroundImage = `url(${img(s.backdrop_path, 'original')})`;
+    $('button.play', el).onclick = (e) => watchTrailer(e.currentTarget.dataset.t, e.currentTarget.dataset.id);
+    hero.insertBefore(el, $('.dots', hero));
+    const dot = document.createElement('i'); if (i === 0) dot.className = 'on';
+    dot.onclick = () => go(i); $('.dots', hero).appendChild(dot);
+  });
+  let cur = 0;
+  function go(i) {
+    cur = i;
+    hero.querySelectorAll('.slide').forEach((n, k) => n.classList.toggle('on', k === i));
+    hero.querySelectorAll('.dots i').forEach((n, k) => n.classList.toggle('on', k === i));
+  }
+  clearInterval(heroTimer);
+  heroTimer = setInterval(() => { if (!document.hidden && slides.length) go((cur + 1) % slides.length); }, 7000);
+  view.appendChild(hero);
+  const t10 = trend.results.filter((x) => x.media_type !== 'person' && x.poster_path);
+  view.appendChild(row('Top 10 Today', t10, null, null, { top: true, limit: 10 }));
+  view.appendChild(row('Trending Now', trend.results.filter((x) => x.media_type !== 'person'), null));
+  view.appendChild(row('Popular Movies', pm.results, 'movie', '#/browse/movie'));
+  view.appendChild(row('Popular TV Shows', ptv.results, 'tv', '#/browse/tv'));
+  view.appendChild(row('Hindi Movies', hindi.results, 'movie', '#/browse/hindi'));
+  view.appendChild(row('Anime Series', anime.results, 'tv', '#/browse/anime'));
+  view.appendChild(row('Top Rated Movies', top.results, 'movie'));
+  view.appendChild(row('Coming Soon', up.results, 'movie'));
+}
+
+const BROWSE = {
+  short: { title: 'Short TV', cats: [
+    ['Quick Watch (under 15 min)', '/discover/tv', { 'with_runtime.lte': 15, 'with_runtime.gte': 1, sort_by: 'popularity.desc', 'vote_count.gte': 5 }, 'tv'],
+    ['Under 30 min', '/discover/tv', { 'with_runtime.lte': 30, 'with_runtime.gte': 1, sort_by: 'popularity.desc', 'vote_count.gte': 20 }, 'tv'],
+    ['Mini Series', '/discover/tv', { with_type: 2, sort_by: 'popularity.desc' }, 'tv'],
+    ['Top Rated Shorts', '/discover/tv', { 'with_runtime.lte': 30, 'with_runtime.gte': 1, sort_by: 'vote_average.desc', 'vote_count.gte': 100 }, 'tv']] },
+  regional: { title: 'Regional', cats: [
+    ['Hindi Movies', '/discover/movie', { with_original_language: 'hi', sort_by: 'popularity.desc', 'vote_count.gte': 10 }, 'movie'], ['Hindi Series', '/discover/tv', { with_original_language: 'hi', sort_by: 'popularity.desc' }, 'tv'],
+    ['Tamil Movies', '/discover/movie', { with_original_language: 'ta', sort_by: 'popularity.desc', 'vote_count.gte': 10 }, 'movie'], ['Tamil Series', '/discover/tv', { with_original_language: 'ta', sort_by: 'popularity.desc' }, 'tv'],
+    ['Telugu Movies', '/discover/movie', { with_original_language: 'te', sort_by: 'popularity.desc', 'vote_count.gte': 10 }, 'movie'], ['Telugu Series', '/discover/tv', { with_original_language: 'te', sort_by: 'popularity.desc' }, 'tv'],
+    ['Kannada Movies', '/discover/movie', { with_original_language: 'kn', sort_by: 'popularity.desc', 'vote_count.gte': 10 }, 'movie'], ['Kannada Series', '/discover/tv', { with_original_language: 'kn', sort_by: 'popularity.desc' }, 'tv'],
+    ['Malayalam Movies', '/discover/movie', { with_original_language: 'ml', sort_by: 'popularity.desc', 'vote_count.gte': 10 }, 'movie'], ['Malayalam Series', '/discover/tv', { with_original_language: 'ml', sort_by: 'popularity.desc' }, 'tv'],
+    ['Bengali Movies', '/discover/movie', { with_original_language: 'bn', sort_by: 'popularity.desc', 'vote_count.gte': 10 }, 'movie'], ['Bengali Series', '/discover/tv', { with_original_language: 'bn', sort_by: 'popularity.desc' }, 'tv'],
+    ['Marathi Movies', '/discover/movie', { with_original_language: 'mr', sort_by: 'popularity.desc', 'vote_count.gte': 10 }, 'movie'], ['Marathi Series', '/discover/tv', { with_original_language: 'mr', sort_by: 'popularity.desc' }, 'tv'],
+    ['Punjabi Movies', '/discover/movie', { with_original_language: 'pa', sort_by: 'popularity.desc', 'vote_count.gte': 10 }, 'movie'], ['Punjabi Series', '/discover/tv', { with_original_language: 'pa', sort_by: 'popularity.desc' }, 'tv']] },
+  originals: { title: 'Originals', cats: [
+    ['Netflix', '/discover/tv', { with_networks: 213, sort_by: 'popularity.desc' }, 'tv'],
+    ['Prime Video', '/discover/tv', { with_networks: 1024, sort_by: 'popularity.desc' }, 'tv'],
+    ['Apple TV+', '/discover/tv', { with_networks: 2552, sort_by: 'popularity.desc' }, 'tv'],
+    ['Disney+', '/discover/tv', { with_networks: 2739, sort_by: 'popularity.desc' }, 'tv'],
+    ['HBO', '/discover/tv', { with_networks: 49, sort_by: 'popularity.desc' }, 'tv'],
+    ['Hulu', '/discover/tv', { with_networks: 453, sort_by: 'popularity.desc' }, 'tv']] }
+};
+
+async function browseView(kind, catIdx = 0) {
+  const cfg = BROWSE[kind]; if (!cfg) return (location.hash = '#/home');
+  await genres();
+  view.innerHTML = `<h1 class="page">${cfg.title}</h1><div class="chips" id="cats"></div><div class="grid" id="grid"></div><div class="center" id="more" style="min-height:90px"></div>`;
+  const cats = $('#cats');
+  cfg.cats.forEach((c, i) => {
+    const b = html(`<button class="chip ${i === catIdx ? 'on' : ''}">${esc(c[0])}</button>`);
+    b.onclick = () => browseView(kind, i); cats.appendChild(b);
+  });
+  const [, path, params, type] = cfg.cats[catIdx];
+  let page = 1, total = 1, loading = false;
+  const grid = $('#grid'), more = $('#more');
+  async function load() {
+    if (loading || page > total) return; loading = true;
+    more.innerHTML = '<div class="spinner"></div>';
+    try {
+      const d = await api(path, { ...params, page });
+      total = Math.min(d.total_pages, 500); page++;
+      d.results.filter((x) => x.backdrop_path || x.poster_path).forEach((x) => grid.appendChild(card(x, type)));
+      more.innerHTML = page <= total ? '<button class="btn" id="lm">Load more</button>' : '';
+      if ($('#lm')) $('#lm').onclick = load;
+    } catch (e) { more.textContent = e.message; }
+    loading = false;
+  }
+  load();
+}
+
+async function searchView(q) {
+  clearInterval(heroTimer);
+  view.innerHTML = `<div class="searchbar"><span class="si">${ICON.search}</span><input id="q" placeholder="Search movies, series, anime..." autocomplete="off" value="${esc(q || '')}"><div class="sugg hidden" id="sugg"></div></div><div id="out"></div>`;
+  const input = $('#q'), sugg = $('#sugg'), out = $('#out');
+  if (!q) input.focus();
+  const recents = () => store.get('recents', []);
+  function renderRecents() {
+    const r = recents();
+    out.innerHTML = r.length ? `<div class="section-head"><h3>Recent</h3><button class="linkbtn" id="clr">🗑 Clear</button></div><div class="chips" id="rc"></div>` : '<div class="center">Type a title to start searching.</div>';
+    if (!r.length) return;
+    r.forEach((t) => {
+      const c = html(`<button class="chip sm">${esc(t)}</button>`); c.onclick = () => { location.hash = '#/search/' + encodeURIComponent(t); }; $('#rc').appendChild(c);
+    });
+    $('#clr').onclick = () => { store.set('recents', []); renderRecents(); };
+  }
+  async function results(text) {
+    sugg.classList.add('hidden');
+    const r = [text, ...recents().filter((x) => x.toLowerCase() !== text.toLowerCase())].slice(0, 12); store.set('recents', r);
+    out.innerHTML = `<div class="section-head"><h3>Results for "${esc(text)}"</h3></div><div class="grid" id="grid"></div><div class="center" id="more" style="min-height:90px"></div>`;
+    await genres();
+    let page = 1, total = 1; const grid = $('#grid'), more = $('#more'); let count = 0;
+    async function load() {
+      more.innerHTML = '<div class="spinner"></div>';
+      try {
+        const d = await api('/search/multi', { query: text, page, include_adult: 'false' });
+        total = d.total_pages; page++;
+        d.results.filter((x) => x.media_type !== 'person' && (x.backdrop_path || x.poster_path)).forEach((x) => { grid.appendChild(card(x)); count++; });
+        more.innerHTML = page <= total ? '<button class="btn" id="lm">Load more</button>' : (count ? '' : 'No results found.');
+        if ($('#lm')) $('#lm').onclick = load;
+      } catch (e) { more.textContent = e.message; }
+    }
+    load();
+  }
+  let t;
+  input.addEventListener('input', () => {
+    clearTimeout(t); const v = input.value.trim();
+    if (v.length < 2) { sugg.classList.add('hidden'); return; }
+    t = setTimeout(async () => {
+      try {
+        const d = await api('/search/multi', { query: v, include_adult: 'false' });
+        const items = d.results.filter((x) => x.media_type !== 'person').slice(0, 6);
+        sugg.innerHTML = items.map((x) => `<a href="#/title/${x.media_type}/${x.id}">${esc(x.title || x.name)}<small>${x.media_type === 'tv' ? 'Series' : 'Movie'} · ${esc((x.release_date || x.first_air_date || '').slice(0, 4))}</small></a>`).join('');
+        sugg.classList.toggle('hidden', !items.length);
+      } catch { /* ignore */ }
+    }, 250);
+  });
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && input.value.trim()) location.hash = '#/search/' + encodeURIComponent(input.value.trim()); });
+  if (q) results(q); else renderRecents();
+}
+
+async function detailView(type, id) {
+  clearInterval(heroTimer);
+  if (!['movie', 'tv'].includes(type)) return (location.hash = '#/home');
+  view.innerHTML = spinner;
+  const lang = store.get('lang', 'en-US').slice(0, 2);
+  const d = await api(`/${type}/${id}`, { append_to_response: 'videos,credits,recommendations,watch/providers', include_video_language: `${lang},en,null` });
+  const title = d.title || d.name, year = (d.release_date || d.first_air_date || '').slice(0, 4);
+  const lite = toLite(type, d); pushHistory(lite);
+  const runtime = d.runtime || (d.episode_run_time && d.episode_run_time[0]);
+  const prov = d['watch/providers']?.results?.[region()];
+  const provHtml = prov ? [['flatrate', 'Stream'], ['rent', 'Rent'], ['buy', 'Buy']].filter(([k]) => prov[k]?.length).map(([k, label]) =>
+    `<div class="h-sm" style="margin-top:12px">${label}</div><div class="providers">${prov[k].map((p) => `<span class="prov"><img alt="" src="${esc(img(p.logo_path, 'w92'))}">${esc(p.provider_name)}</span>`).join('')}</div>`).join('') +
+    (prov.link ? `<p class="note"><a href="${esc(prov.link)}" target="_blank" rel="noopener" style="text-decoration:underline">Open on JustWatch ↗</a></p>` : '') : '<p class="note">No streaming info for your region.</p>';
+  const trailerKey = (d.videos?.results || []).filter((v) => v.site === 'YouTube').sort((a, b) => (b.type === 'Trailer') - (a.type === 'Trailer'))[0]?.key;
+
+  view.innerHTML = '';
+  const page = html(`<div>
+    <div class="backdrop"></div>
+    <div class="d-wrap">
+      <div class="d-poster">${d.poster_path ? `<img alt="" src="${esc(img(d.poster_path, 'w500'))}">` : ''}</div>
+      <div class="d-info">
+        <h1>${esc(title)} <span style="color:var(--muted);font-weight:400">${year ? '(' + year + ')' : ''}</span></h1>
+        ${d.tagline ? `<p class="tagline">${esc(d.tagline)}</p>` : ''}
+        <div class="meta"><span class="pill type">${type === 'tv' ? 'SERIES' : 'MOVIE'}</span><span class="pill rate">★ ${Number(d.vote_average || 0).toFixed(1)}</span>
+          ${runtime ? `<span>${runtime} min</span>` : ''}${type === 'tv' ? `<span>${d.number_of_seasons} season(s) · ${d.number_of_episodes} eps</span>` : ''}
+          <span>${esc((d.genres || []).map((g) => g.name).join(' • '))}</span></div>
+        <div style="display:flex;gap:10px;margin:14px 0;flex-wrap:wrap">
+          ${trailerKey ? '<button class="btn primary" id="tr">▶ Watch Trailer</button>' : ''}
+          <button class="btn" id="ml"></button>
+          ${d.homepage ? `<a class="btn" href="${esc(d.homepage)}" target="_blank" rel="noopener">Official site ↗</a>` : ''}
+        </div>
+        <h3 class="h-sm">Synopsis</h3><p>${esc(d.overview || 'No synopsis available.')}</p>
+        <h3 class="h-sm">Audio / Languages</h3>
+        <div class="chips" style="padding:0">${(d.spoken_languages || []).map((l) => `<span class="chip sm">${esc(l.english_name)}</span>`).join('') || '<span class="note">Unknown</span>'}</div>
+        <h3 class="h-sm">Where to watch (${esc(region())})</h3>${provHtml}
+      </div>
+    </div>
+    <h3 class="h-sm pad" style="margin-top:30px">Cast &amp; Crew</h3><div class="cast" id="cast"></div>
+    <div id="seasons"></div><div id="recs"></div></div>`);
+  $('.backdrop', page).style.backgroundImage = d.backdrop_path ? `url(${img(d.backdrop_path, 'w1280')})` : 'none';
+  const mlBtn = $('#ml', page);
+  const syncML = () => { mlBtn.textContent = myList.has(type, d.id) ? '✓ In My List' : '+ My List'; };
+  syncML(); mlBtn.onclick = () => { myList.toggle(lite); syncML(); };
+  if (trailerKey) $('#tr', page).onclick = () => playTrailer(trailerKey);
+  const castBox = $('#cast', page);
+  const people = [...(d.credits?.cast || []).slice(0, 14), ...(d.credits?.crew || []).filter((c) => ['Director', 'Creator', 'Writer'].includes(c.job)).slice(0, 3)];
+  people.forEach((p) => castBox.appendChild(html(`<div class="person"><div class="av">${p.profile_path ? `<img loading="lazy" alt="" src="${esc(img(p.profile_path, 'w185'))}">` : ''}</div><b>${esc(p.name)}</b><small>${esc(p.character || p.job || '')}</small></div>`)));
+  if (!people.length) castBox.innerHTML = '<span class="note">No cast information.</span>';
+  const recs = (d.recommendations?.results || []).filter((x) => x.poster_path);
+  if (recs.length) $('#recs', page).appendChild(row('You may also like', recs, type));
+  view.appendChild(page);
+
+  if (type === 'tv' && d.seasons?.length) {
+    const seasons = d.seasons.filter((s) => s.season_number > 0 && s.episode_count > 0);
+    const list = seasons.length ? seasons : d.seasons;
+    const box = $('#seasons', page);
+    box.innerHTML = `<div class="section-head"><h3>Episodes</h3><select class="sel" id="ssel">${list.map((s) => `<option value="${s.season_number}">${esc(s.name)} (${s.episode_count} eps)</option>`).join('')}</select></div><div class="eps" id="eps"></div>`;
+    const loadSeason = async (n) => {
+      const eps = $('#eps', box); eps.innerHTML = '<div class="spinner" style="margin:20px"></div>';
+      try {
+        const s = await api(`/tv/${id}/season/${n}`);
+        eps.innerHTML = '';
+        s.episodes.forEach((e) => eps.appendChild(html(`<div class="ep"><div class="still">${e.still_path ? `<img loading="lazy" alt="" src="${esc(img(e.still_path, 'w300'))}">` : 'E' + e.episode_number}</div>
+          <div class="b"><b>${e.episode_number}. ${esc(e.name)}</b><small>${esc(e.air_date || '')}${e.runtime ? ' · ' + e.runtime + ' min' : ''}${e.vote_average ? ' · ★ ' + e.vote_average.toFixed(1) : ''}</small><p>${esc(e.overview || '')}</p></div></div>`)));
+      } catch (e) { eps.textContent = e.message; }
+    };
+    $('#ssel', box).onchange = (e) => loadSeason(e.target.value);
+    loadSeason(list[0].season_number);
+  }
+}
+
+function listView(kind) {
+  clearInterval(heroTimer);
+  const items = kind === 'mylist' ? myList.all() : store.get('history', []);
+  const name = kind === 'mylist' ? 'My List' : 'History';
+  view.innerHTML = `<div class="section-head"><h1 class="page" style="margin:0">${name}</h1>${items.length && kind === 'history' ? '<button class="linkbtn" id="clr">🗑 Clear</button>' : ''}</div><div class="grid" id="grid"></div>`;
+  const grid = $('#grid');
+  if (!items.length) grid.outerHTML = `<div class="center">${kind === 'mylist' ? 'Nothing saved yet. Open a title and tap "+ My List".' : 'Titles you open will appear here.'}</div>`;
+  items.forEach((i) => grid.appendChild(card(i)));
+  if ($('#clr')) $('#clr').onclick = () => { store.set('history', []); listView(kind); };
+}
+
+
+/* ---------- music (Apple iTunes Search API: 30-second official previews) ---------- */
+const player = $('#player');
+const audio = new Audio();
+let queue = [], qi = -1;
+const fmt = (t) => (isFinite(t) ? Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0') : '0:00');
+const artBig = (u) => (u || '').replace(/\d+x\d+bb/, '300x300bb');
+function renderPlayer() {
+  const t = queue[qi]; if (!t) return;
+  player.classList.remove('hidden');
+  player.innerHTML = `<img alt="" src="${esc(t.art)}"><div class="pi"><b>${esc(t.name)}</b><small>${esc(t.artist)} · 30s preview</small></div>
+    <button id="pp" class="pb" aria-label="Previous">⏮</button><button id="pl" class="pb big">${audio.paused ? '▶' : '⏸'}</button><button id="pn" class="pb" aria-label="Next">⏭</button>
+    <span id="pt">0:00</span><input id="pr" type="range" min="0" max="100" value="0"><span>0:30</span>`;
+  $('#pl').onclick = () => (audio.paused ? audio.play() : audio.pause());
+  $('#pp').onclick = () => playAt(qi - 1); $('#pn').onclick = () => playAt(qi + 1);
+  $('#pr').oninput = (e) => { if (audio.duration) audio.currentTime = (e.target.value / 100) * audio.duration; };
+}
+function playAt(i) {
+  if (i < 0 || i >= queue.length) return;
+  qi = i; audio.src = queue[i].preview; audio.play().catch(() => {}); renderPlayer();
+  document.querySelectorAll('.trk').forEach((n, k) => n.classList.toggle('now', k === i));
+}
+audio.addEventListener('play', () => { const b = $('#pl'); if (b) b.textContent = '⏸'; });
+audio.addEventListener('pause', () => { const b = $('#pl'); if (b) b.textContent = '▶'; });
+audio.addEventListener('ended', () => playAt(qi + 1));
+audio.addEventListener('timeupdate', () => { const r = $('#pr'); if (r && audio.duration) { r.value = (audio.currentTime / audio.duration) * 100; $('#pt').textContent = fmt(audio.currentTime); } });
+const normTrack = (x) => ({ id: x.trackId, name: x.trackName, artist: x.artistName, art: artBig(x.artworkUrl100), preview: x.previewUrl });
+
+async function itunes(url) {
+  const r = await fetch(url); if (!r.ok) throw new Error('Music service error ' + r.status);
+  return r.json();
+}
+async function musicView(q) {
+  clearInterval(heroTimer);
+  const cc = region().toLowerCase();
+  view.innerHTML = `<div class="searchbar"><span class="si">${ICON.search}</span><input id="mq" placeholder="Search songs, artists..." autocomplete="off" value="${esc(q || '')}"></div>
+    <h1 class="page" id="mt">${q ? 'Results for "' + esc(q) + '"' : 'Top Songs'}</h1><div class="chips" id="mchips"></div><div class="tracks" id="tracks"><div class="center"><div class="spinner"></div></div></div>
+    <p class="note pad">Previews and artwork provided by Apple. Only 30-second previews are available.</p>`;
+  const input = $('#mq'); input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && input.value.trim()) location.hash = '#/music/' + encodeURIComponent(input.value.trim()); });
+  const tracks = $('#tracks');
+  const chips = [['Bollywood', 'bollywood'], ['Punjabi', 'punjabi'], ['Tamil', 'tamil hits'], ['Telugu', 'telugu hits'], ['Pop', 'pop hits'], ['Hip-Hop', 'hip hop'], ['Lo-fi', 'lofi']];
+  chips.forEach(([n, t]) => { const c = html(`<button class="chip sm">${n}</button>`); c.onclick = () => { location.hash = '#/music/' + encodeURIComponent(t); }; $('#mchips').appendChild(c); });
+  try {
+    let list;
+    if (q) list = (await itunes(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=music&entity=song&limit=50&country=${cc}`)).results;
+    else {
+      const chart = await itunes(`https://rss.applemarketingtools.com/api/v2/${cc}/music/most-played/50/songs.json`);
+      const ids = chart.feed.results.map((x) => x.id).join(',');
+      list = (await itunes(`https://itunes.apple.com/lookup?id=${ids}&country=${cc}`)).results;
+    }
+    queue = list.filter((x) => x.previewUrl && x.trackName).map(normTrack); qi = -1;
+    tracks.innerHTML = queue.length ? '' : '<div class="center">No songs found.</div>';
+    queue.forEach((t, i) => {
+      const row = html(`<div class="trk"><span class="n">${i + 1}</span><img loading="lazy" alt="" src="${esc(t.art)}"><div class="ti"><b>${esc(t.name)}</b><small>${esc(t.artist)}</small></div><span class="pbtn">▶</span></div>`);
+      row.onclick = () => playAt(i); tracks.appendChild(row);
+    });
+  } catch (e) { tracks.innerHTML = `<div class="center">${esc(e.message)}</div>`; }
+}
+
+/* ---------- router ---------- */
+function setTab(name) {
+  document.querySelectorAll('#tabs a').forEach((a) => a.classList.toggle('active', a.dataset.tab === name));
+}
+async function route() {
+  clearInterval(heroTimer);
+  const [, a, b, c] = (location.hash || '#/home').split('/');
+  window.scrollTo(0, 0);
+  try {
+    if (a === 'browse') { setTab(b); await browseView(b); }
+    else if (a === 'music') { setTab('music'); await musicView(b ? decodeURIComponent(b) : ''); }
+    else if (a === 'search') { setTab(''); await searchView(b ? decodeURIComponent(b) : ''); }
+    else if (a === 'title') { setTab(''); await detailView(b, c); }
+    else if (a === 'mylist' || a === 'history') { setTab(''); listView(a); }
+    else { setTab('home'); await homeView(); }
+  } catch (e) { showError(e); }
+}
+window.addEventListener('scroll', () => document.querySelector('.topbar').classList.toggle('solid', window.scrollY > 10), { passive: true });
+window.addEventListener('hashchange', route);
+route();

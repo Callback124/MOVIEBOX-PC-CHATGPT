@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https://image.tmdb.org https://*.mzstatic.com data:; media-src https://*.mzstatic.com; frame-src https://www.youtube-nocookie.com; connect-src 'self' https://api.themoviedb.org https://itunes.apple.com https://rss.applemarketingtools.com; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<title>MovieBox</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="#/home"><span class="wordmark">MOVIEBOX</span></a>
+  <nav class="tabs" id="tabs">
+    <a href="#/home" data-tab="home">Home</a>
+    <a href="#/browse/short" data-tab="short">Short TV</a>
+    <a href="#/browse/regional" data-tab="regional">Regional</a>
+    <a href="#/browse/originals" data-tab="originals">Originals</a>
+    <a href="#/music" data-tab="music">Music</a>
+  </nav>
+  <div class="actions">
+    <a class="icon-btn" href="#/search" title="Search" id="btn-search"></a>
+    <a class="icon-btn" href="#/mylist" title="My List" id="btn-list"></a>
+    <a class="icon-btn" href="#/history" title="History" id="btn-history"></a>
+    <button class="icon-btn" title="Settings" id="btn-settings"></button>
+  </div>
+</header>
+<main id="view"></main>
+<footer class="foot">
+  This product uses the TMDB API but is not endorsed or certified by TMDB. Streaming availability data provided by JustWatch.
+</footer>
+<div id="modal" class="modal hidden"></div>
+<div id="player" class="player hidden"></div>
+<script src="app.js"></script>
+</body>
+</html>
