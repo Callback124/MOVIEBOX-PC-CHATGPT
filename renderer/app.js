@@ -200,6 +200,11 @@ async function fetchMovieBoxHome() {
   if (nativeApi?.getHome) {
     const result = await nativeApi.getHome();
     const payload = result?.response || result;
+    // Native Android bridge extracts the fresh JWT from the /home x-user response header.
+    if (result?.token) {
+      window.__movieBoxSessionToken = result.token;
+      store.set('movieboxToken', result.token);
+    }
     if (payload?.data) return payload;
     throw new Error(payload?.message || 'MovieBox Home API returned no data');
   }
@@ -221,9 +226,20 @@ const MOVIEBOX_SEARCH_HEADERS = {
   'x-client-info': JSON.stringify({ timezone: 'Asia/Calcutta' })
 };
 async function movieBoxSearchRequest(kind, keyword, page = 1) {
-  const token = (store.get('movieboxToken', '') || '').trim();
-  if (kind === 'search' && !token) throw new Error('Add your MovieBox session token in Settings to search titles.');
+  let token = (window.__movieBoxSessionToken || store.get('movieboxToken', '') || '').trim();
   const nativeApi = window.Capacitor?.Plugins?.MovieBoxHomeApi;
+  // If no cached session exists, obtain it from the native /home response header.
+  if (kind === 'search' && !token && nativeApi?.getHome) {
+    const homeResult = await nativeApi.getHome();
+    token = (homeResult?.token || '').trim();
+    if (token) {
+      window.__movieBoxSessionToken = token;
+      store.set('movieboxToken', token);
+    }
+  }
+  if (kind === 'search' && !token) {
+    throw new Error('Fresh token was not present in the /home response x-user header. Retry once the service is reachable.');
+  }
   if (nativeApi) {
     const result = kind === 'suggest'
       ? await nativeApi.searchSuggest({ keyword })
