@@ -7,6 +7,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(ExoPlayerPlugin.class);
+        registerPlugin(MovieBoxHomeApi.class);
         super.onCreate(savedInstanceState);
     }
 }
