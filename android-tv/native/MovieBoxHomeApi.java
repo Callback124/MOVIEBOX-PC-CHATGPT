@@ -13,7 +13,6 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 
 /** Native HTTP bridge for MovieBox Home and Search APIs. */
@@ -55,7 +54,7 @@ public class MovieBoxHomeApi extends Plugin {
         } catch (Exception e) { call.reject("Could not create search request"); }
     }
 
-    private void request(PluginCall call, String method, String path, JSONObject body) {\n        request(call, method, path, body, null);\n    }\n\n    private void request(PluginCall call, String method, String path, JSONObject body, String token) {
+    private void request(PluginCall call, String method, String path, JSONObject body, String token) {
         new Thread(() -> {
             Exception lastError = null;
             for (String base : BASES) {
@@ -70,9 +69,9 @@ public class MovieBoxHomeApi extends Plugin {
                     connection.setRequestProperty("Origin", "https://movieboxph.org");
                     connection.setRequestProperty("Referer", "https://movieboxph.org/");
                     connection.setRequestProperty("x-client-info", "{\"timezone\":\"Asia/Calcutta\"}");
-                    if (path.equals("subject/search")) {
-                        connection.setRequestProperty("Authorization", "Bearer " + SEARCH_TOKEN);
-                        connection.setRequestProperty("x-user", SEARCH_TOKEN);
+                    if (path.equals("subject/search") && token != null && !token.trim().isEmpty()) {
+                        connection.setRequestProperty("Authorization", "Bearer " + token);
+                        connection.setRequestProperty("x-user", token);
                     }
                     connection.setRequestProperty("Accept", method.equals("POST")
                             ? "application/json, text/plain, */*" : "application/json, text/plain, */*");
