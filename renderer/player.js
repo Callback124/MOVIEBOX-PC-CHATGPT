@@ -25,8 +25,22 @@
     nativePlugin = null;
     try {
       const C = window.Capacitor;
-      if (C && C.getPlatform && C.getPlatform() === 'android' && C.registerPlugin) nativePlugin = C.registerPlugin('ExoPlayer');
-    } catch { /* not in the TV app */ }
+      if (!C || !C.getPlatform || C.getPlatform() !== 'android') return null;
+      // Capacitor 6 exposes Java-registered plugins through Capacitor.Plugins.
+      // registerPlugin() is an ES-module API and is not guaranteed on the global bridge.
+      const registered = C.Plugins && C.Plugins.ExoPlayer;
+      if (registered && typeof registered.play === 'function') {
+        nativePlugin = registered;
+        return nativePlugin;
+      }
+      // Keep compatibility with builds that explicitly expose registerPlugin globally.
+      if (typeof C.registerPlugin === 'function') {
+        const plugin = C.registerPlugin('ExoPlayer');
+        if (plugin && typeof plugin.play === 'function') nativePlugin = plugin;
+      }
+    } catch (error) {
+      console.error('[MovieBox] ExoPlayer plugin lookup failed:', error);
+    }
     return nativePlugin;
   }
 
@@ -279,7 +293,7 @@
       }
     }
     if (window.Capacitor?.getPlatform?.() === 'android') {
-      throw new Error('Android ExoPlayer plugin is unavailable. This APK may be an older build.');
+      throw new Error('Android ExoPlayer plugin is not registered in the Capacitor bridge. Check native plugin registration in this APK.');
     }
     openHtml5(o);
     return true;
