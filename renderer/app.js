@@ -86,6 +86,7 @@ function card(item, forced, opts = {}) {
   const year = item.year ?? (item.release_date || item.first_air_date || '').slice(0, 4);
   const poster = item.poster ?? item.poster_path;
   const vote = item.vote ?? item.vote_average;
+  const voteStr = Number(vote) > 0 ? `<span class="badge rate">★ ${Number(vote).toFixed(1)}</span>` : '';
   const href = item.moviebox ? `#/title/${esc(type)}/${encodeURIComponent(String(item.id))}` : `#/title/${esc(type)}/${item.id}`;
   const identity = item.movieboxIdentity || (item.moviebox ? identifyMovieBoxCard(item) : null);
   const typeBadge = identity ? `<span class="badge type">${esc(identity.badgeText)}</span>` : '';
