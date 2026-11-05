@@ -346,12 +346,15 @@ function movieBoxStreamOptions(data) {
   const streamKeys = /^(streams?|hls|dash|play|playback|video|videos|source|sources|quality|qualities|file|files|media|download)$/i;
   const urlKeys = ['url', 'src', 'playUrl', 'streamUrl', 'fileUrl', 'uri', 'videoUrl', 'mediaUrl', 'downloadUrl', 'masterUrl'];
   const kindFor = (key, url, hint = '') => {
-    const ext = String(url || '').match(/\.(m3u8|mpd|mp4|m4v|webm|mov)(?:$|[?#])/i)?.[1]?.toUpperCase();
-    if (ext === 'M3U8' || /HLS|M3U8/i.test(String(hint))) return 'HLS';
-    if (ext === 'MPD' || /DASH|MPD/i.test(String(hint))) return 'DASH';
-    if (ext || /MP4/i.test(String(hint))) return 'MP4';
-    if (/hls/i.test(key)) return 'HLS';
-    if (/dash/i.test(key)) return 'DASH';
+    const k = String(key || '').toLowerCase();
+    const h = String(hint || '').toLowerCase();
+    const u = String(url || '').toLowerCase().split(/[?#]/)[0];
+    // Explicit container keys must win over inherited "format: mp4" metadata.
+    if (k === 'hls' || k === 'm3u8' || h.includes('hls') || h.includes('m3u8') || h.includes('mpegurl')) return 'HLS';
+    if (k === 'dash' || k === 'mpd' || h.includes('dash') || h.includes('mpd') || h.includes('dash+xml')) return 'DASH';
+    if (/\.(m3u8)$/.test(u)) return 'HLS';
+    if (/\.(mpd)$/.test(u)) return 'DASH';
+    if (/\.(mp4|m4v|webm|mov)$/.test(u) || h.includes('mp4')) return 'MP4';
     return 'STREAM';
   };
   const add = (value, key = 'data', context = false, inherited = {}) => {
@@ -378,7 +381,7 @@ function movieBoxStreamOptions(data) {
     if (candidate && (streamContext || /\.(m3u8|mpd|mp4|m4v|webm|mov)(?:$|[?#])/i.test(candidate))) {
       const resolution = value.resolution || value.height || value.quality || value.definition || inherited.resolution || '';
       const label = value.name || value.label || value.qualityName || value.definitionName || inherited.label || '';
-      found.push({ url: candidate, kind: kindFor(key, candidate, value.format || value.type || inherited.format), resolution: String(resolution), label: String(label) });
+      found.push({ url: candidate, kind: kindFor(key, candidate, value.format || value.type || value.mimeType || value.mime || value.protocol || value.streamType || inherited.format), resolution: String(resolution), label: String(label) });
     }
     for (const [childKey, childValue] of Object.entries(value)) {
       if (urlKeys.includes(childKey) && typeof childValue === 'string') continue;
@@ -429,17 +432,17 @@ async function playMovieBoxEpisode(subjectId, se, ep, title, detailPath = '') {
       const apiMessage = lastPayload?.message || data?.message || lastAttemptError?.message || 'No direct stream URL was returned';
       throw new Error(apiMessage + ' (hasResource: ' + String(data?.hasResource) + '; tried se=' + attempts.map(x => x.se + ',ep=' + x.ep).join(' and ') + ')');
     }
-    const start = (source) => {
+    const start = async (source) => {
       if (typeof window.MB_play !== 'function') throw new Error('Built-in ExoPlayer bridge is not loaded. Rebuild the latest Android APK.');
       if (status) { status.style.display = 'block'; status.textContent = 'Opening ' + (source.label || source.resolution || source.kind) + ' in ExoPlayer…'; }
       try {
-        window.MB_play({
+        await window.MB_play({
           src: source.url,
           format: source.kind,
           title: title + (source.label || source.resolution ? ' · ' + (source.label || source.resolution) : ''),
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36',
-            Referer: 'https://movieboxph.org/',
+            Referer: movieBoxPlaybackReferer(detailPath),
             Origin: 'https://movieboxph.org',
             Accept: '*/*'
           }
