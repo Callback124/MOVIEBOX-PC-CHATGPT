@@ -23,12 +23,11 @@ public class MovieBoxHomeApi extends Plugin {
         "https://h5-api.aoneroom.com/wefeed-h5api-bff/",
         "https://movieboxph.org/wefeed-h5api-bff/"
     };
-    private static final String SEARCH_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOjEzNzc5NDUxNDIxODgwNDAwNDgsImF0cCI6MywiZXh0IjoiMTc4OTkwNTk2NyIsImV4cCI6MTc5NzY4MTk2NywiaWF0IjoxNzg5OTA1NjY3fQ.nu-oeO3EcNKS1WUqxDeH2MKM7-v9-l1EPTvSmlQNiio";
     private static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
     @PluginMethod
     public void getHome(PluginCall call) {
-        request(call, "GET", "home", null);
+        request(call, "GET", "home", null, null);
     }
 
     @PluginMethod
@@ -38,25 +37,25 @@ public class MovieBoxHomeApi extends Plugin {
         JSONObject body = new JSONObject();
         try { body.put("keyword", keyword); }
         catch (Exception e) { call.reject("Could not create suggestion request"); return; }
-        request(call, "POST", "subject/search-suggest", body);
+        request(call, "POST", "subject/search-suggest", body, null);
     }
 
     @PluginMethod
     public void search(PluginCall call) {
         String keyword = call.getString("keyword", "");
         int page = call.getInt("page", 1);
-        int pageSize = call.getInt("pageSize", 20);
+        String token = call.getString("token", "");
         if (keyword.trim().isEmpty()) { call.reject("Search keyword is required"); return; }
         JSONObject body = new JSONObject();
         try {
             body.put("keyword", keyword);
             body.put("page", Math.max(1, page));
             body.put("perPage", 24);
-            request(call, "POST", "subject/search", body);
+            request(call, "POST", "subject/search", body, token);
         } catch (Exception e) { call.reject("Could not create search request"); }
     }
 
-    private void request(PluginCall call, String method, String path, JSONObject body) {
+    private void request(PluginCall call, String method, String path, JSONObject body) {\n        request(call, method, path, body, null);\n    }\n\n    private void request(PluginCall call, String method, String path, JSONObject body, String token) {
         new Thread(() -> {
             Exception lastError = null;
             for (String base : BASES) {
