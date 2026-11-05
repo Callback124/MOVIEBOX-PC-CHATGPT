@@ -67,6 +67,7 @@ public class MovieBoxHomeApi extends Plugin {
                     connection.setUseCaches(false);
                     connection.setRequestProperty("User-Agent", USER_AGENT);
                     connection.setRequestProperty("Origin", "https://movieboxph.org");
+                    connection.setRequestProperty("Accept-Language", "en-US,en;q=0.9");
                     connection.setRequestProperty("Referer", "https://movieboxph.org/");
                     connection.setRequestProperty("x-client-info", "{\"timezone\":\"Asia/Calcutta\"}");
                     if (path.equals("subject/search") && token != null && !token.trim().isEmpty()) {
@@ -81,7 +82,10 @@ public class MovieBoxHomeApi extends Plugin {
                         connection.setRequestProperty("Content-Type", "application/json");
                         byte[] bytes = body.toString().getBytes(StandardCharsets.UTF_8);
                         connection.setFixedLengthStreamingMode(bytes.length);
-                        connection.getOutputStream().write(bytes);
+                        try (java.io.OutputStream output = connection.getOutputStream()) {
+                            output.write(bytes);
+                            output.flush();
+                        }
                     }
                     int status = connection.getResponseCode();
                     InputStream stream = status >= 200 && status < 300
@@ -94,7 +98,11 @@ public class MovieBoxHomeApi extends Plugin {
                             while ((line = reader.readLine()) != null) responseBody.append(line);
                         }
                     }
-                    if (status < 200 || status >= 300) throw new Exception("HTTP " + status);
+                    if (status < 200 || status >= 300) {
+                        String detail = responseBody.toString();
+                        if (detail.length() > 700) detail = detail.substring(0, 700);
+                        throw new Exception("HTTP " + status + (detail.isEmpty() ? "" : ": " + detail));
+                    }
                     JSONObject json = new JSONObject(responseBody.toString());
                     if (!json.has("data") || json.isNull("data"))
                         throw new Exception("API response has no data field");
