@@ -124,6 +124,21 @@ public class MovieBoxHomeApi extends Plugin {
                         throw new Exception("API response has no data field");
                     JSObject result = new JSObject();
                     result.put("response", json);
+                    if ("home".equals(path)) {
+                        String xUserHeader = connection.getHeaderField("x-user");
+                        if (xUserHeader != null && !xUserHeader.trim().isEmpty()) {
+                            try {
+                                JSONObject userData = new JSONObject(xUserHeader);
+                                String freshToken = userData.optString("token", "");
+                                if (!freshToken.isEmpty()) result.put("token", freshToken);
+                            } catch (Exception ignored) {
+                                // Some deployments may return the token as a plain header value.
+                                String freshToken = normalizeToken(xUserHeader);
+                                if (!freshToken.isEmpty() && !freshToken.startsWith("{"))
+                                    result.put("token", freshToken);
+                            }
+                        }
+                    }
                     call.resolve(result);
                     return;
                 } catch (Exception e) { lastError = e; }
