@@ -22,7 +22,7 @@ public class MovieBoxHomeApi extends Plugin {
         "https://h5-api.aoneroom.com/wefeed-h5api-bff/",
         "https://movieboxph.org/wefeed-h5api-bff/"
     };
-    private static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+    private static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36";
 
     @PluginMethod
     public void getHome(PluginCall call) {
