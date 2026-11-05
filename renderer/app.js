@@ -167,8 +167,7 @@ function openSettings() {
   openModal(`<h2 style="margin-top:0">Settings</h2>
     <label class="field" for="s-key">TMDB API key or Read Access Token</label>
     <input id="s-key" type="password" autocomplete="off" placeholder="Paste your key" value="${esc(store.get('key', ''))}">
-    <label class="field" for="s-moviebox-token">MovieBox session token (required for search results)</label>
-    <input id="s-moviebox-token" type="password" autocomplete="off" placeholder="Paste MovieBox session token" value="${esc(store.get('movieboxToken', ''))}">
+    <p class="note">MovieBox search session is fetched automatically from the Home API.</p>
     <label class="field" for="s-lang">Content language</label>
     <select id="s-lang">${langs.map(([v, n]) => `<option value="${v}" ${v === lang ? 'selected' : ''}>${n}</option>`).join('')}</select>
     <label class="field" for="s-reg">Region (for "where to watch")</label>
@@ -177,7 +176,7 @@ function openSettings() {
     <p class="note">Your key is stored only on this computer. Get a free key at themoviedb.org → Settings → API.</p>
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px"><button class="btn" id="s-clear">Clear history</button><button class="btn primary" id="s-save">Save</button></div>`, 'small');
   $('#s-save').onclick = () => {
-    store.set('key', $('#s-key').value.trim()); store.set('movieboxToken', $('#s-moviebox-token').value.trim()); store.set('lang', $('#s-lang').value); store.set('region', $('#s-reg').value);
+    store.set('key', $('#s-key').value.trim()); store.set('lang', $('#s-lang').value); store.set('region', $('#s-reg').value);
     cache.clear(); genreMap = null; closeModal(); route();
   };
   $('#s-clear').onclick = () => { store.set('history', []); store.set('recents', []); closeModal(); route(); };
