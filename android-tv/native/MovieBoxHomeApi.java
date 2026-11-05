@@ -54,6 +54,32 @@ public class MovieBoxHomeApi extends Plugin {
         } catch (Exception e) { call.reject("Could not create search request"); }
     }
 
+
+    @PluginMethod
+    public void detail(PluginCall call) {
+        String subjectId = call.getString("subjectId", "");
+        String token = normalizeToken(call.getString("token", ""));
+        if (subjectId.trim().isEmpty()) { call.reject("subjectId is required"); return; }
+        try {
+            String query = "detail?subjectId=" + java.net.URLEncoder.encode(subjectId, "UTF-8");
+            request(call, "GET", query, null, token);
+        } catch (Exception e) { call.reject("Could not create detail request"); }
+    }
+
+    @PluginMethod
+    public void play(PluginCall call) {
+        String subjectId = call.getString("subjectId", "");
+        int season = call.getInt("se", 0);
+        int episode = call.getInt("ep", 0);
+        String token = normalizeToken(call.getString("token", ""));
+        if (subjectId.trim().isEmpty()) { call.reject("subjectId is required"); return; }
+        try {
+            String query = "subject/play?subjectId=" + java.net.URLEncoder.encode(subjectId, "UTF-8")
+                    + "&se=" + Math.max(0, season) + "&ep=" + Math.max(0, episode);
+            request(call, "GET", query, null, token);
+        } catch (Exception e) { call.reject("Could not create play request"); }
+    }
+
     private static String normalizeToken(String value) {
         if (value == null) return "";
         String token = value.trim();
@@ -86,7 +112,7 @@ public class MovieBoxHomeApi extends Plugin {
                     connection.setRequestProperty("Sec-Fetch-Dest", "empty");
                     connection.setRequestProperty("Referer", "https://movieboxph.org/");
                     connection.setRequestProperty("x-client-info", "{\"timezone\":\"Asia/Calcutta\"}");
-                    if (path.equals("subject/search") && token != null && !token.trim().isEmpty()) {
+                    if ((path.equals("subject/search") || path.startsWith("detail?") || path.startsWith("subject/play?")) && token != null && !token.trim().isEmpty()) {
                         connection.setRequestProperty("Authorization", "Bearer " + token);
                         connection.setRequestProperty("x-user", token);
                     }
