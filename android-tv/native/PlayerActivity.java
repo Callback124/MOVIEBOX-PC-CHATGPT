@@ -45,6 +45,15 @@ import androidx.media3.common.TrackSelectionParameters;
 import androidx.media3.common.Tracks;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.datasource.DefaultDataSource;
+import androidx.media3.datasource.DefaultHttpDataSource;
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
+
+import org.json.JSONObject;
+
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
 import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.PlayerView;
 
@@ -181,7 +190,28 @@ public class PlayerActivity extends Activity {
     /* ===================================================== player ===================================================== */
 
     private void initPlayer() {
-        player = new ExoPlayer.Builder(this).build();
+        Map<String, String> requestHeaders = new HashMap<>();
+        requestHeaders.put("User-Agent", "Mozilla/5.0 (Linux; Android 13; TV) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36");
+        String headerJson = getIntent().getStringExtra("headers");
+        if (headerJson != null && !headerJson.isEmpty()) {
+            try {
+                JSONObject suppliedHeaders = new JSONObject(headerJson);
+                Iterator<String> names = suppliedHeaders.keys();
+                while (names.hasNext()) {
+                    String name = names.next();
+                    String value = suppliedHeaders.optString(name, "");
+                    if (!value.isEmpty()) requestHeaders.put(name, value);
+                }
+            } catch (Exception ignored) { }
+        }
+        DefaultHttpDataSource.Factory httpFactory = new DefaultHttpDataSource.Factory()
+                .setUserAgent(requestHeaders.remove("User-Agent"))
+                .setDefaultRequestProperties(requestHeaders)
+                .setAllowCrossProtocolRedirects(true);
+        DefaultDataSource.Factory dataSourceFactory = new DefaultDataSource.Factory(this, httpFactory);
+        player = new ExoPlayer.Builder(this)
+                .setMediaSourceFactory(new DefaultMediaSourceFactory(dataSourceFactory))
+                .build();
         playerView.setPlayer(player);
         player.addListener(new Player.Listener() {
             @Override
