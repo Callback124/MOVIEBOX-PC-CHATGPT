@@ -191,7 +191,8 @@ public class PlayerActivity extends Activity {
 
     private void initPlayer() {
         Map<String, String> requestHeaders = new HashMap<>();
-        requestHeaders.put("User-Agent", "Mozilla/5.0 (Linux; Android 13; TV) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36");
+        requestHeaders.put("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36");
+        requestHeaders.put("Accept", "*/*");
         String headerJson = getIntent().getStringExtra("headers");
         if (headerJson != null && !headerJson.isEmpty()) {
             try {
@@ -240,12 +241,20 @@ public class PlayerActivity extends Activity {
 
         String url = getIntent().getStringExtra("url");
         String title = getIntent().getStringExtra("title");
+        String format = getIntent().getStringExtra("format");
         long pos = getIntent().getLongExtra("pos", 0L);
         titleView.setText(title == null ? "" : title);
-        MediaItem item = new MediaItem.Builder()
+        MediaItem.Builder mediaItemBuilder = new MediaItem.Builder()
                 .setUri(Uri.parse(url))
-                .setMediaMetadata(new MediaMetadata.Builder().setTitle(title).build())
-                .build();
+                .setMediaMetadata(new MediaMetadata.Builder().setTitle(title).build());
+        // Signed CDN URLs may not expose a recognizable extension; use the API's format hint.
+        if (format != null) {
+            String f = format.toUpperCase(Locale.ROOT);
+            if (f.contains("HLS") || f.contains("M3U8")) mediaItemBuilder.setMimeType("application/x-mpegURL");
+            else if (f.contains("DASH") || f.contains("MPD")) mediaItemBuilder.setMimeType("application/dash+xml");
+            else if (f.contains("MP4")) mediaItemBuilder.setMimeType("video/mp4");
+        }
+        MediaItem item = mediaItemBuilder.build();
         player.setMediaItem(item);
         player.prepare();
         if (pos > 0) player.seekTo(pos);
