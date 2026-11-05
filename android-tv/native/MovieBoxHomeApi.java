@@ -69,14 +69,19 @@ public class MovieBoxHomeApi extends Plugin {
     @PluginMethod
     public void play(PluginCall call) {
         String subjectId = call.getString("subjectId", "");
+        String detailPath = call.getString("detailPath", "");
         int season = call.getInt("se", 0);
         int episode = call.getInt("ep", 0);
         String token = normalizeToken(call.getString("token", ""));
         if (subjectId.trim().isEmpty()) { call.reject("subjectId is required"); return; }
         try {
-            String query = "subject/play?subjectId=" + java.net.URLEncoder.encode(subjectId, "UTF-8")
-                    + "&se=" + Math.max(0, season) + "&ep=" + Math.max(0, episode);
-            request(call, "GET", query, null, token);
+            StringBuilder query = new StringBuilder("subject/play?subjectId=")
+                    .append(java.net.URLEncoder.encode(subjectId, "UTF-8"));
+            if (!detailPath.trim().isEmpty()) {
+                query.append("&detailPath=").append(java.net.URLEncoder.encode(detailPath.trim(), "UTF-8"));
+            }
+            query.append("&se=").append(Math.max(0, season)).append("&ep=").append(Math.max(0, episode));
+            request(call, "GET", query.toString(), null, token, detailPath);
         } catch (Exception e) { call.reject("Could not create play request"); }
     }
 
@@ -88,6 +93,10 @@ public class MovieBoxHomeApi extends Plugin {
     }
 
     private void request(PluginCall call, String method, String path, JSONObject body, String token) {
+        request(call, method, path, body, token, "");
+    }
+
+    private void request(PluginCall call, String method, String path, JSONObject body, String token, String detailPath) {
         new Thread(() -> {
             Exception lastError = null;
             String[] endpoints = path.startsWith("subject/play?")
@@ -113,7 +122,19 @@ public class MovieBoxHomeApi extends Plugin {
                     connection.setRequestProperty("Sec-Fetch-Site", "cross-site");
                     connection.setRequestProperty("Sec-Fetch-Mode", "cors");
                     connection.setRequestProperty("Sec-Fetch-Dest", "empty");
-                    connection.setRequestProperty("Referer", "https://movieboxph.org/");
+                    String referer = "https://movieboxph.org/";
+                    if (path.startsWith("subject/play?") && detailPath != null && !detailPath.trim().isEmpty()) {
+                        String cleanPath = detailPath.trim();
+                        if (cleanPath.startsWith("http://") || cleanPath.startsWith("https://")) {
+                            referer = cleanPath;
+                        } else if (cleanPath.startsWith("/")) {
+                            referer = "https://movieboxph.org" + cleanPath;
+                        } else {
+                            if (cleanPath.regionMatches(true, 0, "play/", 0, 5)) cleanPath = cleanPath.substring(5);
+                            referer = "https://movieboxph.org/play/" + cleanPath;
+                        }
+                    }
+                    connection.setRequestProperty("Referer", referer);
                     connection.setRequestProperty("x-client-info", "{\"timezone\":\"Asia/Calcutta\"}");
                     if ((path.equals("subject/search") || path.startsWith("detail?") || path.startsWith("subject/play?")) && token != null && !token.trim().isEmpty()) {
                         connection.setRequestProperty("Authorization", "Bearer " + token);
