@@ -167,6 +167,8 @@ function openSettings() {
   openModal(`<h2 style="margin-top:0">Settings</h2>
     <label class="field" for="s-key">TMDB API key or Read Access Token</label>
     <input id="s-key" type="password" autocomplete="off" placeholder="Paste your key" value="${esc(store.get('key', ''))}">
+    <label class="field" for="s-moviebox-token">MovieBox session token (required for search results)</label>
+    <input id="s-moviebox-token" type="password" autocomplete="off" placeholder="Paste MovieBox session token" value="${esc(store.get('movieboxToken', ''))}">
     <label class="field" for="s-lang">Content language</label>
     <select id="s-lang">${langs.map(([v, n]) => `<option value="${v}" ${v === lang ? 'selected' : ''}>${n}</option>`).join('')}</select>
     <label class="field" for="s-reg">Region (for "where to watch")</label>
@@ -175,7 +177,7 @@ function openSettings() {
     <p class="note">Your key is stored only on this computer. Get a free key at themoviedb.org → Settings → API.</p>
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px"><button class="btn" id="s-clear">Clear history</button><button class="btn primary" id="s-save">Save</button></div>`, 'small');
   $('#s-save').onclick = () => {
-    store.set('key', $('#s-key').value.trim()); store.set('lang', $('#s-lang').value); store.set('region', $('#s-reg').value);
+    store.set('key', $('#s-key').value.trim()); store.set('movieboxToken', $('#s-moviebox-token').value.trim()); store.set('lang', $('#s-lang').value); store.set('region', $('#s-reg').value);
     cache.clear(); genreMap = null; closeModal(); route();
   };
   $('#s-clear').onclick = () => { store.set('history', []); store.set('recents', []); closeModal(); route(); };
@@ -219,34 +221,39 @@ const MOVIEBOX_SEARCH_HEADERS = {
   'x-client-info': JSON.stringify({ timezone: 'Asia/Calcutta' })
 };
 async function movieBoxSearchRequest(kind, keyword, page = 1) {
+  const token = (store.get('movieboxToken', '') || '').trim();
+  if (kind === 'search' && !token) throw new Error('Add your MovieBox session token in Settings to search titles.');
   const nativeApi = window.Capacitor?.Plugins?.MovieBoxHomeApi;
   if (nativeApi) {
     const result = kind === 'suggest'
       ? await nativeApi.searchSuggest({ keyword })
-      : await nativeApi.search({ keyword, page, pageSize: 20 });
+      : await nativeApi.search({ keyword, page, pageSize: 24, token });
     const payload = result?.response || result;
     if (payload?.data) return payload;
     throw new Error(payload?.message || 'MovieBox search API returned no data');
   }
   const endpoints = [
-    'https://h5-api.aoneroom.com/wefeed-h5api-bff/',
-    'https://movieboxph.org/wefeed-h5api-bff/'
+    'https://h5-api.aoneroom.com/wefeed-h5api-bff/subject/',
+    'https://movieboxph.org/wefeed-h5api-bff/subject/'
   ];
   let lastError;
   for (const base of endpoints) {
     try {
       const isSuggest = kind === 'suggest';
-      const url = isSuggest ? base + 'search-suggest'
-        : base + 'search?keyword=' + encodeURIComponent(keyword) + '&page=' + page + '&pageSize=20';
-      const response = await fetch(url, {
-        method: isSuggest ? 'POST' : 'GET',
-        headers: MOVIEBOX_SEARCH_HEADERS,
-        body: isSuggest ? JSON.stringify({ keyword }) : undefined,
+      const headers = { ...MOVIEBOX_SEARCH_HEADERS };
+      if (!isSuggest) {
+        headers.Authorization = 'Bearer ' + token;
+        headers['x-user'] = token;
+      }
+      const response = await fetch(base + (isSuggest ? 'search-suggest' : 'search'), {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(isSuggest ? { keyword } : { keyword, page, perPage: 24 }),
         cache: 'no-store'
       });
       if (!response.ok) throw new Error('HTTP ' + response.status);
       const payload = await response.json();
-      if (!payload?.data) throw new Error('Unexpected MovieBox search response');
+      if (payload?.code !== 0 || !payload?.data) throw new Error(payload?.message || 'Unexpected MovieBox search response');
       return payload;
     } catch (error) { lastError = error; }
   }
@@ -450,9 +457,9 @@ async function searchView(q) {
       const data = payload.data || {};
       const rawItems = Array.isArray(data.items) ? data.items : (Array.isArray(data.list) ? data.list : []);
       const items = rawItems.map(movieBoxItem).filter((item) => item.id && item.poster_path);
-      const total = Number(data.totalPages ?? data.total_pages ?? data.pageCount ?? data.pagination?.totalPages ?? 0);
-      const totalResults = Number(data.total ?? data.totalResults ?? data.pagination?.total ?? 0);
-      const totalPages = total || (totalResults ? Math.ceil(totalResults / 20) : (rawItems.length >= 20 ? page + 1 : page));
+      const pager = data.pager || {};
+      const totalPages = Number(pager.totalPages ?? pager.total_pages ?? 0)
+        || (pager.hasMore === true ? page + 1 : page);
       return { total_pages: totalPages, items };
     }, (item) => card(item));
   }
@@ -462,14 +469,15 @@ async function searchView(q) {
       const payload = await movieBoxSearchRequest('suggest', keyword);
       if (requestId !== suggestionRequest || input.value.trim() !== keyword) return;
       const data = payload.data || {};
-      const rawItems = Array.isArray(data.list) ? data.list : (Array.isArray(data.items) ? data.items : []);
-      const items = rawItems.map(movieBoxItem).filter((item) => item.id && item.title).slice(0, 8);
+      const rawItems = Array.isArray(data.items) ? data.items : (Array.isArray(data.list) ? data.list : []);
+      const words = rawItems.map((item) => typeof item === 'string' ? item : item?.word || item?.title || '')
+        .map((word) => String(word).trim()).filter(Boolean).slice(0, 8);
       sugg.innerHTML = '';
-      items.forEach((item) => {
-        const option = html(`<a href="#/search/${encodeURIComponent(item.title)}">${item.poster_path ? `<img loading="lazy" alt="" src="${esc(img(item.poster_path, 'w185'))}">` : ''}<span>${esc(item.title)}<small>${item.type === 'tv' ? 'Series' : 'Movie'}${item.release_date ? ' · ' + esc(item.release_date) : ''}</small></span></a>`);
+      words.forEach((word) => {
+        const option = html(`<a href="#/search/${encodeURIComponent(word)}"><span>${esc(word)}<small>Search suggestion</small></span></a>`);
         sugg.appendChild(option);
       });
-      sugg.classList.toggle('hidden', !items.length);
+      sugg.classList.toggle('hidden', !words.length);
     } catch {
       if (requestId === suggestionRequest) sugg.classList.add('hidden');
     }
