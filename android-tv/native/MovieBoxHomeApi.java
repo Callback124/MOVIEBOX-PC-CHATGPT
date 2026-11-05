@@ -43,7 +43,7 @@ public class MovieBoxHomeApi extends Plugin {
     public void search(PluginCall call) {
         String keyword = call.getString("keyword", "");
         int page = call.getInt("page", 1);
-        String token = call.getString("token", "");
+        String token = normalizeToken(call.getString("token", ""));
         if (keyword.trim().isEmpty()) { call.reject("Search keyword is required"); return; }
         JSONObject body = new JSONObject();
         try {
@@ -52,6 +52,13 @@ public class MovieBoxHomeApi extends Plugin {
             body.put("perPage", 24);
             request(call, "POST", "subject/search", body, token);
         } catch (Exception e) { call.reject("Could not create search request"); }
+    }
+
+    private static String normalizeToken(String value) {
+        if (value == null) return "";
+        String token = value.trim();
+        if (token.regionMatches(true, 0, "Bearer ", 0, 7)) token = token.substring(7).trim();
+        return token;
     }
 
     private void request(PluginCall call, String method, String path, JSONObject body, String token) {
@@ -68,6 +75,15 @@ public class MovieBoxHomeApi extends Plugin {
                     connection.setRequestProperty("User-Agent", USER_AGENT);
                     connection.setRequestProperty("Origin", "https://movieboxph.org");
                     connection.setRequestProperty("Accept-Language", "en-US,en;q=0.9");
+                    connection.setRequestProperty("Cache-Control", "no-cache");
+                    connection.setRequestProperty("Pragma", "no-cache");
+                    connection.setRequestProperty("Accept-Encoding", "identity");
+                    connection.setRequestProperty("sec-ch-ua", "\"Chromium\";v=\"124\", \"Google Chrome\";v=\"124\", \"Not-A.Brand\";v=\"99\"");
+                    connection.setRequestProperty("sec-ch-ua-mobile", "?0");
+                    connection.setRequestProperty("sec-ch-ua-platform", "\"Windows\"");
+                    connection.setRequestProperty("Sec-Fetch-Site", "cross-site");
+                    connection.setRequestProperty("Sec-Fetch-Mode", "cors");
+                    connection.setRequestProperty("Sec-Fetch-Dest", "empty");
                     connection.setRequestProperty("Referer", "https://movieboxph.org/");
                     connection.setRequestProperty("x-client-info", "{\"timezone\":\"Asia/Calcutta\"}");
                     if (path.equals("subject/search") && token != null && !token.trim().isEmpty()) {
