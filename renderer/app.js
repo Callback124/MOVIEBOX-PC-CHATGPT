@@ -388,7 +388,7 @@ async function playMovieBoxEpisode(subjectId, se, ep, title) {
     const start = (source) => {
       if (typeof window.MB_play !== 'function') throw new Error('Built-in player module is not ready.');
       if (status) { status.style.display = 'none'; status.textContent = ''; }
-      window.MB_play({ src: source.url, title: title + (source.label || source.resolution ? ' · ' + (source.label || source.resolution) : '') });
+      window.MB_play({ src: source.url, title: title + (source.label || source.resolution ? ' · ' + (source.label || source.resolution) : ''), headers: { Referer: 'https://movieboxph.org/', Origin: 'https://movieboxph.org' } });
     };
     if (options.length === 1) start(options[0]);
     else {
