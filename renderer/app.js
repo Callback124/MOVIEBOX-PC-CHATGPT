@@ -293,10 +293,15 @@ async function movieBoxSearchRequest(kind, keyword, page = 1) {
 async function movieBoxApiGet(kind, params) {
   let token = (window.__movieBoxSessionToken || store.get('movieboxToken', '') || '').trim();
   const nativeApi = window.Capacitor?.Plugins?.MovieBoxHomeApi;
-  if (!token && nativeApi?.getHome) {
+  // Play requests always refresh the session first; a cached x-user token may have expired.
+  if ((!token || kind === 'play') && nativeApi?.getHome) {
     const homeResult = await nativeApi.getHome();
-    token = (homeResult?.token || '').trim();
-    if (token) { window.__movieBoxSessionToken = token; store.set('movieboxToken', token); }
+    const freshToken = (homeResult?.token || '').trim();
+    if (freshToken) {
+      token = freshToken;
+      window.__movieBoxSessionToken = freshToken;
+      store.set('movieboxToken', freshToken);
+    }
   }
   if (nativeApi) {
     const method = kind === 'detail' ? nativeApi.detail : nativeApi.play;
@@ -315,8 +320,18 @@ async function movieBoxApiGet(kind, params) {
   let lastError;
   for (const base of bases) {
     try {
-      const headers = { Accept: '*/*', 'x-client-info': JSON.stringify({ timezone: 'Asia/Calcutta' }), 'x-request-lang': 'en' };
-      if (token) headers.Authorization = 'Bearer ' + token;
+      const headers = {
+        Accept: '*/*',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36',
+        Origin: 'https://movieboxph.org',
+        Referer: 'https://movieboxph.org/',
+        'x-client-info': JSON.stringify({ timezone: 'Asia/Calcutta' }),
+        'x-request-lang': 'en'
+      };
+      if (token) {
+        headers.Authorization = 'Bearer ' + token;
+        headers['x-user'] = token;
+      }
       const response = await fetch(base + path, { method: 'GET', headers, cache: 'no-store' });
       if (!response.ok) throw new Error('HTTP ' + response.status);
       const payload = await response.json();
@@ -380,15 +395,48 @@ function movieBoxStreamOptions(data) {
 }
 async function playMovieBoxEpisode(subjectId, se, ep, title) {
   const status = $('.mb-play-status');
-  if (status) { status.style.display = 'block'; status.textContent = 'Loading video sources…'; }
+  if (status) { status.style.display = 'block'; status.textContent = 'Refreshing session and loading video sources…'; }
   try {
-    const payload = await movieBoxApiGet('play', { subjectId, se, ep });
-    const options = movieBoxStreamOptions(payload.data || payload);
-    if (!options.length) throw new Error('The Play API returned no direct MP4, HLS or DASH stream URL. Check the Play API response structure/session.');
+    const attempts = [{ se: Number(se), ep: Number(ep) }];
+    const alternate = Number(se) === 0 && Number(ep) === 0 ? { se: 1, ep: 1 } : { se: 0, ep: 0 };
+    attempts.push(alternate);
+    let options = [];
+    let lastPayload = null;
+    let used = attempts[0];
+    for (const params of attempts) {
+      used = params;
+      const payload = await movieBoxApiGet('play', { subjectId: String(subjectId), se: params.se, ep: params.ep });
+      lastPayload = payload;
+      const data = payload?.data || payload;
+      options = movieBoxStreamOptions(data);
+      if (options.length) break;
+      // The server explicitly says there is no resource for this se/ep pair; try the alternate pair.
+      if (data?.hasResource === true) break;
+    }
+    if (!options.length) {
+      const data = lastPayload?.data || lastPayload || {};
+      const apiMessage = lastPayload?.message || data?.message || 'No direct stream URL was returned';
+      throw new Error(apiMessage + ' (hasResource: ' + String(data?.hasResource) + '; tried se=' + attempts.map(x => x.se + ',ep=' + x.ep).join(' and ') + ')');
+    }
     const start = (source) => {
-      if (typeof window.MB_play !== 'function') throw new Error('Built-in player module is not ready.');
-      if (status) { status.style.display = 'none'; status.textContent = ''; }
-      window.MB_play({ src: source.url, title: title + (source.label || source.resolution ? ' · ' + (source.label || source.resolution) : ''), headers: { Referer: 'https://movieboxph.org/', Origin: 'https://movieboxph.org' } });
+      if (typeof window.MB_play !== 'function') throw new Error('Built-in ExoPlayer bridge is not loaded. Rebuild the latest Android APK.');
+      if (status) { status.style.display = 'block'; status.textContent = 'Opening ' + (source.label || source.resolution || source.kind) + ' in ExoPlayer…'; }
+      try {
+        window.MB_play({
+          src: source.url,
+          title: title + (source.label || source.resolution ? ' · ' + (source.label || source.resolution) : ''),
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36',
+            Referer: 'https://movieboxph.org/',
+            Origin: 'https://movieboxph.org',
+            Accept: '*/*'
+          }
+        });
+        setTimeout(() => { if (status) { status.style.display = 'none'; status.textContent = ''; } }, 900);
+      } catch (error) {
+        if (status) status.textContent = 'Player launch error: ' + (error?.message || error);
+        throw error;
+      }
     };
     if (options.length === 1) start(options[0]);
     else {
@@ -463,7 +511,7 @@ async function movieBoxDetailView(id) {
       const list = $('#mb-episode-list', episodesBox); list.innerHTML = '';
       const maxEp = Math.max(0, Math.min(500, Number(season?.maxEp || 0)));
       for (let ep = 1; ep <= maxEp; ep++) {
-        const item = html('<button class="ep" type="button" aria-label="Play Season ' + Number(seasonNo) + ' Episode ' + ep + '"><div class="still"><span class="ep-number">E' + ep + '</span></div><div class="b"><b>Episode ' + ep + '</b><small>Season ' + Number(seasonNo) + '</small></div></button>');
+        const item = html('<button class="ep" type="button" aria-label="Play Season ' + Number(seasonNo) + ' Episode ' + ep + '"><div class="still"><span class="ep-number">E' + ep + '</span></div></button>');
         item.onclick = () => playMovieBoxEpisode(String(id), Number(seasonNo), ep, title + ' · S' + seasonNo + ' E' + ep);
         list.appendChild(item);
       }
