@@ -265,7 +265,7 @@
   function play(o) {
     const n = native();
     if (n && /^https?:\/\//i.test(o.src)) {
-      n.play({ url: o.src, title: o.title || '', position: store.get('mbp:pos:' + o.src, 0), headers: o.headers || {} }).catch((error) => alert('Native ExoPlayer could not start: ' + (error?.message || 'Unknown error')));
+      n.play({ url: o.src, title: o.title || '', position: store.get('mbp:pos:' + o.src, 0), format: o.format || '', headers: o.headers || {} }).catch((error) => alert('Native ExoPlayer could not start: ' + (error?.message || 'Unknown error')));
     } else openHtml5(o);
   }
 
