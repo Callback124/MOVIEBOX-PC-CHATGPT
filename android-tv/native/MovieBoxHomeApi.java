@@ -90,7 +90,9 @@ public class MovieBoxHomeApi extends Plugin {
     private void request(PluginCall call, String method, String path, JSONObject body, String token) {
         new Thread(() -> {
             Exception lastError = null;
-            for (String base : BASES) {
+            String[] endpoints = path.startsWith("subject/play?")
+                    ? new String[] { BASES[1], BASES[0] } : BASES;
+            for (String base : endpoints) {
                 HttpURLConnection connection = null;
                 try {
                     connection = (HttpURLConnection) new URL(base + path).openConnection();
@@ -100,6 +102,7 @@ public class MovieBoxHomeApi extends Plugin {
                     connection.setUseCaches(false);
                     connection.setRequestProperty("User-Agent", USER_AGENT);
                     connection.setRequestProperty("Origin", "https://movieboxph.org");
+                    connection.setRequestProperty("x-request-lang", "en");
                     connection.setRequestProperty("Accept-Language", "en-US,en;q=0.9");
                     connection.setRequestProperty("Cache-Control", "no-cache");
                     connection.setRequestProperty("Pragma", "no-cache");
