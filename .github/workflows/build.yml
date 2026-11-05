@@ -34,6 +34,8 @@ jobs:
 
   release:
     needs: [exe, apk]
+    # publish the exe even if the apk job fails, so one broken part never blocks the other
+    if: ${{ !cancelled() && needs.exe.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4

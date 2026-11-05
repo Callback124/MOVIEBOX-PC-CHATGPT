@@ -38,9 +38,13 @@ must(fs.existsSync(javaDir), 'java package dir not found: ' + javaDir);
 for (const f of ['MainActivity.java', 'ExoPlayerPlugin.java', 'PlayerActivity.java']) {
   fs.copyFileSync(path.join(__dirname, 'native', f), path.join(javaDir, f));
 }
+// player icons (vector drawables)
+const iconSrc = path.join(__dirname, 'native', 'res', 'drawable');
+fs.mkdirSync(path.join(res, 'drawable'), { recursive: true });
+for (const f of fs.readdirSync(iconSrc)) fs.copyFileSync(path.join(iconSrc, f), path.join(res, 'drawable', f));
 let m2 = fs.readFileSync(mf, 'utf8');
 must(/<\/application>/.test(m2), '</application> not found');
-m2 = m2.replace(/<\/application>/, '    <activity android:name=".PlayerActivity" android:exported="false" android:screenOrientation="landscape"\n            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|smallestScreenSize|screenLayout|uiMode"\n            android:theme="@android:style/Theme.NoTitleBar.Fullscreen" />\n    </application>');
+m2 = m2.replace(/<\/application>/, '    <activity android:name=".PlayerActivity" android:exported="false" android:screenOrientation="landscape"\n            android:supportsPictureInPicture="true" android:enableOnBackInvokedCallback="false"\n            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|smallestScreenSize|screenLayout|uiMode"\n            android:theme="@android:style/Theme.NoTitleBar.Fullscreen" />\n    </application>');
 fs.writeFileSync(mf, m2);
 
 const media3 = process.env.MEDIA3 || '1.4.1';
