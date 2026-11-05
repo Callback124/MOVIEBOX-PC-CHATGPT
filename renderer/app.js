@@ -499,11 +499,8 @@ async function homeView() {
         <h2>${esc(title)}</h2>
         <div class="meta"><span class="match">${s.vote_average ? Math.round(s.vote_average * 10) + '% Match' : 'Featured'}</span><span>${esc(s.release_date || '')}</span><span class="age">HD</span></div>
         <p>${esc(s.overview)}</p>
-        <div class="hbtns"><button class="hb play" data-id="${esc(s.id)}">▶ Play Trailer</button><a class="hb more" href="#/title/${esc(s.type)}/${encodeURIComponent(s.id)}">ⓘ More Info</a></div></div></div>`);
+        <div class="hbtns"><a class="hb play" href="#/title/moviebox/${encodeURIComponent(String(s.id))}">▶ Watch</a></div></div></div>`);
       el.style.backgroundImage = `url("${String(s.backdrop_path || s.poster_path).replace(/["\\\\]/g, '')}")`;
-      $('button.play', el).onclick = () => {
-        openModal('<div class="center">Trailer lookup is not provided by the Home API.</div>', 'small');
-      };
       hero.insertBefore(el, $('.dots', hero));
       const dot = document.createElement('i'); if (i === 0) dot.className = 'on';
       dot.onclick = () => go(i); $('.dots', hero).appendChild(dot);
