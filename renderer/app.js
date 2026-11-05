@@ -213,6 +213,45 @@ async function fetchMovieBoxHome() {
   }
   throw new Error('MovieBox Home API unavailable. ' + (lastError?.message || 'Network error'));
 }
+const MOVIEBOX_SEARCH_HEADERS = {
+  'Content-Type': 'application/json',
+  'Accept': 'application/json, text/plain, */*',
+  'x-client-info': JSON.stringify({ timezone: 'Asia/Calcutta' })
+};
+async function movieBoxSearchRequest(kind, keyword, page = 1) {
+  const nativeApi = window.Capacitor?.Plugins?.MovieBoxHomeApi;
+  if (nativeApi) {
+    const result = kind === 'suggest'
+      ? await nativeApi.searchSuggest({ keyword })
+      : await nativeApi.search({ keyword, page, pageSize: 20 });
+    const payload = result?.response || result;
+    if (payload?.data) return payload;
+    throw new Error(payload?.message || 'MovieBox search API returned no data');
+  }
+  const endpoints = [
+    'https://h5-api.aoneroom.com/wefeed-h5api-bff/',
+    'https://movieboxph.org/wefeed-h5api-bff/'
+  ];
+  let lastError;
+  for (const base of endpoints) {
+    try {
+      const isSuggest = kind === 'suggest';
+      const url = isSuggest ? base + 'search-suggest'
+        : base + 'search?keyword=' + encodeURIComponent(keyword) + '&page=' + page + '&pageSize=20';
+      const response = await fetch(url, {
+        method: isSuggest ? 'POST' : 'GET',
+        headers: MOVIEBOX_SEARCH_HEADERS,
+        body: isSuggest ? JSON.stringify({ keyword }) : undefined,
+        cache: 'no-store'
+      });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      const payload = await response.json();
+      if (!payload?.data) throw new Error('Unexpected MovieBox search response');
+      return payload;
+    } catch (error) { lastError = error; }
+  }
+  throw new Error('MovieBox search API unavailable. ' + (lastError?.message || 'Network error'));
+}
 function movieBoxUrl(value) {
   if (!value) return '';
   if (typeof value === 'string') return value;
@@ -386,40 +425,69 @@ async function searchView(q) {
   const input = $('#q'), sugg = $('#sugg'), out = $('#out');
   if (!q) input.focus();
   const recents = () => store.get('recents', []);
+  let suggestionTimer = null, suggestionRequest = 0;
   function renderRecents() {
     const r = recents();
     out.innerHTML = r.length ? `<div class="section-head"><h3>Recent</h3><button class="linkbtn" id="clr">🗑 Clear</button></div><div class="chips" id="rc"></div>` : '<div class="center">Type a title to start searching.</div>';
     if (!r.length) return;
     r.forEach((t) => {
-      const c = html(`<button class="chip sm">${esc(t)}</button>`); c.onclick = () => { location.hash = '#/search/' + encodeURIComponent(t); }; $('#rc').appendChild(c);
+      const c = html(`<button class="chip sm">${esc(t)}</button>`);
+      c.onclick = () => { location.hash = '#/search/' + encodeURIComponent(t); };
+      $('#rc').appendChild(c);
     });
     $('#clr').onclick = () => { store.set('recents', []); renderRecents(); };
   }
   async function results(text) {
+    const keyword = String(text || '').trim();
+    if (!keyword) return;
     sugg.classList.add('hidden');
-    const r = [text, ...recents().filter((x) => x.toLowerCase() !== text.toLowerCase())].slice(0, 12); store.set('recents', r);
-    out.innerHTML = `<div class="section-head"><h3>Results for "${esc(text)}"</h3></div><div class="grid" id="grid"></div><div class="center" id="more" style="min-height:90px"></div>`;
-    await genres();
+    const recent = [keyword, ...recents().filter((x) => x.toLowerCase() !== keyword.toLowerCase())].slice(0, 12);
+    store.set('recents', recent);
+    out.innerHTML = `<div class="section-head"><h3>Results for "${esc(keyword)}"</h3></div><div class="grid" id="grid"></div><div class="center" id="more" style="min-height:90px"></div>`;
     const grid = $('#grid'), more = $('#more');
     infinite(grid, more, async (page) => {
-      const d = await api('/search/multi', { query: text, page, include_adult: 'false' });
-      return { total_pages: d.total_pages, items: d.results.filter((x) => x.media_type !== 'person' && x.poster_path) };
-    }, (x) => card(x));
+      const payload = await movieBoxSearchRequest('search', keyword, page);
+      const data = payload.data || {};
+      const rawItems = Array.isArray(data.items) ? data.items : (Array.isArray(data.list) ? data.list : []);
+      const items = rawItems.map(movieBoxItem).filter((item) => item.id && item.poster_path);
+      const total = Number(data.totalPages ?? data.total_pages ?? data.pageCount ?? data.pagination?.totalPages ?? 0);
+      const totalResults = Number(data.total ?? data.totalResults ?? data.pagination?.total ?? 0);
+      const totalPages = total || (totalResults ? Math.ceil(totalResults / 20) : (rawItems.length >= 20 ? page + 1 : page));
+      return { total_pages: totalPages, items };
+    }, (item) => card(item));
   }
-  let t;
+  async function suggestions(keyword) {
+    const requestId = ++suggestionRequest;
+    try {
+      const payload = await movieBoxSearchRequest('suggest', keyword);
+      if (requestId !== suggestionRequest || input.value.trim() !== keyword) return;
+      const data = payload.data || {};
+      const rawItems = Array.isArray(data.list) ? data.list : (Array.isArray(data.items) ? data.items : []);
+      const items = rawItems.map(movieBoxItem).filter((item) => item.id && item.title).slice(0, 8);
+      sugg.innerHTML = '';
+      items.forEach((item) => {
+        const option = html(`<a href="#/search/${encodeURIComponent(item.title)}">${item.poster_path ? `<img loading="lazy" alt="" src="${esc(img(item.poster_path, 'w185'))}">` : ''}<span>${esc(item.title)}<small>${item.type === 'tv' ? 'Series' : 'Movie'}${item.release_date ? ' · ' + esc(item.release_date) : ''}</small></span></a>`);
+        sugg.appendChild(option);
+      });
+      sugg.classList.toggle('hidden', !items.length);
+    } catch {
+      if (requestId === suggestionRequest) sugg.classList.add('hidden');
+    }
+  }
   input.addEventListener('input', () => {
-    clearTimeout(t); const v = input.value.trim();
-    if (v.length < 2) { sugg.classList.add('hidden'); return; }
-    t = setTimeout(async () => {
-      try {
-        const d = await api('/search/multi', { query: v, include_adult: 'false' });
-        const items = d.results.filter((x) => x.media_type !== 'person').slice(0, 6);
-        sugg.innerHTML = items.map((x) => `<a href="#/title/${x.media_type}/${x.id}">${esc(x.title || x.name)}<small>${x.media_type === 'tv' ? 'Series' : 'Movie'} · ${esc((x.release_date || x.first_air_date || '').slice(0, 4))}</small></a>`).join('');
-        sugg.classList.toggle('hidden', !items.length);
-      } catch { /* ignore */ }
-    }, 250);
+    clearTimeout(suggestionTimer);
+    const keyword = input.value.trim();
+    suggestionRequest++;
+    if (keyword.length < 2) { sugg.classList.add('hidden'); return; }
+    suggestionTimer = setTimeout(() => suggestions(keyword), 250);
   });
-  input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && input.value.trim()) location.hash = '#/search/' + encodeURIComponent(input.value.trim()); });
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && input.value.trim()) {
+      clearTimeout(suggestionTimer);
+      suggestionRequest++;
+      location.hash = '#/search/' + encodeURIComponent(input.value.trim());
+    } else if (event.key === 'Escape') sugg.classList.add('hidden');
+  });
   if (q) results(q); else renderRecents();
 }
 
