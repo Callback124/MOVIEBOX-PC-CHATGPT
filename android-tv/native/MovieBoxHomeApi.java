@@ -67,7 +67,7 @@ public class MovieBoxHomeApi extends Plugin {
                     connection.setRequestProperty("User-Agent", USER_AGENT);
                     connection.setRequestProperty("Origin", "https://movieboxph.org");
                     connection.setRequestProperty("Referer", "https://movieboxph.org/");
-                    connection.setRequestProperty("x-client-info", "{\\"timezone\\":\\"Asia/Calcutta\\"}");
+                    connection.setRequestProperty("x-client-info", "{\"timezone\":\"Asia/Calcutta\"}");
                     connection.setRequestProperty("Accept", method.equals("POST")
                             ? "application/json, text/plain, */*" : "application/json, text/plain, */*");
                     connection.setRequestProperty("Connection", "close");
