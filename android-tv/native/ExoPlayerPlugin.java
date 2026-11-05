@@ -16,6 +16,8 @@ public class ExoPlayerPlugin extends Plugin {
         Intent i = new Intent(getContext(), PlayerActivity.class);
         i.putExtra("url", url);
         i.putExtra("title", call.getString("title", ""));
+        JSObject headers = call.getObject("headers");
+        if (headers != null) i.putExtra("headers", headers.toString());
         Double pos = call.getDouble("position", 0.0);
         i.putExtra("pos", (long) ((pos == null ? 0.0 : pos) * 1000));
         getActivity().startActivity(i);
