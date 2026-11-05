@@ -345,15 +345,25 @@ function movieBoxStreamOptions(data) {
   const found = [];
   const streamKeys = /^(streams?|hls|dash|play|playback|video|videos|source|sources|quality|qualities|file|files|media|download)$/i;
   const urlKeys = ['url', 'src', 'playUrl', 'streamUrl', 'fileUrl', 'uri', 'videoUrl', 'mediaUrl', 'downloadUrl', 'masterUrl'];
+  const qualityValue = (...values) => {
+    for (const value of values) {
+      if (value == null || typeof value === 'object') continue;
+      const s = String(value).trim();
+      const m = s.match(/(?:2160|1440|1080|720|576|540|480|360)\s*p?/i);
+      if (m) return m[0].replace(/\s+/g, '').toLowerCase().replace(/p?$/i, 'p');
+      if (/^(4k|uhd)$/i.test(s)) return '2160p';
+      if (/^(fhd|full\s*hd)$/i.test(s)) return '1080p';
+      if (/^(hd)$/i.test(s)) return '720p';
+      if (/^\d{3,4}$/.test(s) && Number(s) >= 240) return s + 'p';
+    }
+    return '';
+  };
   const kindFor = (key, url, hint = '') => {
     const k = String(key || '').toLowerCase();
     const h = String(hint || '').toLowerCase();
     const u = String(url || '').toLowerCase().split(/[?#]/)[0];
-    // Explicit container keys must win over inherited "format: mp4" metadata.
-    if (k === 'hls' || k === 'm3u8' || h.includes('hls') || h.includes('m3u8') || h.includes('mpegurl')) return 'HLS';
-    if (k === 'dash' || k === 'mpd' || h.includes('dash') || h.includes('mpd') || h.includes('dash+xml')) return 'DASH';
-    if (/\.(m3u8)$/.test(u)) return 'HLS';
-    if (/\.(mpd)$/.test(u)) return 'DASH';
+    if (k === 'hls' || k === 'm3u8' || h.includes('hls') || h.includes('m3u8') || h.includes('mpegurl') || /\.m3u8$/.test(u)) return 'HLS';
+    if (k === 'dash' || k === 'mpd' || h.includes('dash') || h.includes('mpd') || h.includes('dash+xml') || /\.mpd$/.test(u)) return 'DASH';
     if (/\.(mp4|m4v|webm|mov)$/.test(u) || h.includes('mp4')) return 'MP4';
     return 'STREAM';
   };
@@ -366,29 +376,28 @@ function movieBoxStreamOptions(data) {
     }
     if (typeof value === 'string') {
       if (/^https?:\/\//i.test(value) && (streamContext || /\.(m3u8|mpd|mp4|m4v|webm|mov)(?:$|[?#])/i.test(value))) {
-        found.push({ url: value, kind: kindFor(key, value), ...inherited });
+        found.push({ url: value, kind: kindFor(key, value, inherited.format), resolution: qualityValue(inherited.resolution, inherited.label) });
       }
       return;
     }
     if (typeof value !== 'object') return;
+    const resolution = qualityValue(value.resolution, value.height, value.quality, value.definition,
+      value.qualityName, value.definitionName, value.videoQuality, inherited.resolution, inherited.label);
+    const labelRaw = value.name || value.label || value.qualityName || value.definitionName || inherited.label || '';
+    const formatHint = value.format || value.type || value.mimeType || value.mime || value.protocol || value.streamType || inherited.format || '';
     let candidate = '';
     for (const field of urlKeys) {
-      if (typeof value[field] === 'string' && /^https?:\/\//i.test(value[field])) {
-        candidate = value[field];
-        break;
-      }
+      if (typeof value[field] === 'string' && /^https?:\/\//i.test(value[field])) { candidate = value[field]; break; }
     }
     if (candidate && (streamContext || /\.(m3u8|mpd|mp4|m4v|webm|mov)(?:$|[?#])/i.test(candidate))) {
-      const resolution = value.resolution || value.height || value.quality || value.definition || inherited.resolution || '';
-      const label = value.name || value.label || value.qualityName || value.definitionName || inherited.label || '';
-      found.push({ url: candidate, kind: kindFor(key, candidate, value.format || value.type || value.mimeType || value.mime || value.protocol || value.streamType || inherited.format), resolution: String(resolution), label: String(label) });
+      found.push({ url: candidate, kind: kindFor(key, candidate, formatHint), resolution, label: String(labelRaw) });
     }
     for (const [childKey, childValue] of Object.entries(value)) {
       if (urlKeys.includes(childKey) && typeof childValue === 'string') continue;
       add(childValue, childKey, streamContext, {
-        resolution: value.resolution || value.height || value.quality || inherited.resolution || '',
-        label: value.name || value.label || inherited.label || '',
-        format: value.format || value.type || inherited.format || ''
+        resolution: resolution || inherited.resolution || '',
+        label: String(labelRaw || inherited.label || ''),
+        format: formatHint
       });
     }
   };
@@ -396,6 +405,18 @@ function movieBoxStreamOptions(data) {
   const unique = [...new Map(found.map((item) => [item.url, item])).values()];
   const rank = (item) => Number(String(item.resolution).match(/\d+/)?.[0] || 0);
   return unique.sort((a, b) => rank(b) - rank(a));
+}
+function movieBoxSourceQuality(source) {
+  return source.resolution || qualityValueFromLabel(source.label) || 'Quality unknown';
+}
+function qualityValueFromLabel(label) {
+  const s = String(label || '');
+  const m = s.match(/(?:2160|1440|1080|720|576|540|480|360)\s*p?/i);
+  if (m) return m[0].replace(/\s+/g, '').replace(/p?$/i, 'p');
+  if (/\b(4k|uhd)\b/i.test(s)) return '2160p';
+  if (/\b(fhd|full\s*hd)\b/i.test(s)) return '1080p';
+  if (/\bhd\b/i.test(s)) return '720p';
+  return '';
 }
 function movieBoxPlaybackReferer(detailPath) {
   let value = String(detailPath || '').trim();
@@ -447,7 +468,7 @@ async function playMovieBoxEpisode(subjectId, se, ep, title, detailPath = '') {
             Accept: '*/*'
           }
         });
-        setTimeout(() => { if (status) { status.style.display = 'none'; status.textContent = ''; } }, 900);
+        if (status) status.textContent = 'Player launch request accepted. If the player did not open, rebuild and install this APK.';
       } catch (error) {
         if (status) status.textContent = 'Player launch error: ' + (error?.message || error);
         throw error;
@@ -458,7 +479,7 @@ async function playMovieBoxEpisode(subjectId, se, ep, title, detailPath = '') {
       if (status) { status.style.display = 'none'; status.textContent = ''; }
       openModal('<h2 style="margin-top:0">Select video quality</h2><div class="source-list">' +
         options.map((x, i) => '<button class="btn source-option" data-source="' + i + '">' +
-          esc(x.label || x.resolution || x.kind) + ' · ' + esc(x.kind) + '</button>').join('') + '</div>', 'small');
+          esc(movieBoxSourceQuality(x)) + ' · ' + esc(x.kind) + '</button>').join('') + '</div>', 'small');
       modal.querySelectorAll('[data-source]').forEach((button) => {
         button.onclick = () => { const selected = options[Number(button.dataset.source)]; closeModal(); start(selected); };
       });
