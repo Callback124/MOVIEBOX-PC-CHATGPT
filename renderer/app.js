@@ -478,8 +478,11 @@ async function searchView(q) {
         sugg.appendChild(option);
       });
       sugg.classList.toggle('hidden', !words.length);
-    } catch {
-      if (requestId === suggestionRequest) sugg.classList.add('hidden');
+    } catch (error) {
+      if (requestId === suggestionRequest) {
+        sugg.textContent = error && error.message ? error.message : 'Suggestion request failed';
+        sugg.classList.remove('hidden');
+      }
     }
   }
   input.addEventListener('input', () => {
