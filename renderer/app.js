@@ -515,7 +515,7 @@ async function movieBoxDetailView(id) {
       const list = $('#mb-episode-list', episodesBox); list.innerHTML = '';
       const maxEp = Math.max(0, Math.min(500, Number(season?.maxEp || 0)));
       for (let ep = 1; ep <= maxEp; ep++) {
-        const item = html('<button class="ep" type="button" aria-label="Play Season ' + Number(seasonNo) + ' Episode ' + ep + '"><div class="still"><span class="ep-number">E' + ep + '</span></div></button>');
+        const item = html('<button class="ep" type="button" aria-label="Play Season ' + Number(seasonNo) + ' Episode ' + ep + '"><div class="still"><span class="ep-number">E' + ep + '</span></div><div class="b"><b>Episode ' + ep + '</b><small>Season ' + Number(seasonNo) + '</small></div></button>');
         item.onclick = () => playMovieBoxEpisode(String(id), Number(seasonNo), ep, title + ' · S' + seasonNo + ' E' + ep);
         list.appendChild(item);
       }
