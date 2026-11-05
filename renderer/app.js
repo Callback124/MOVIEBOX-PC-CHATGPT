@@ -324,7 +324,7 @@ async function movieBoxApiGet(kind, params) {
         Accept: '*/*',
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36',
         Origin: 'https://movieboxph.org',
-        Referer: 'https://movieboxph.org/',
+        Referer: movieBoxPlaybackReferer(detailPath),
         'x-client-info': JSON.stringify({ timezone: 'Asia/Calcutta' }),
         'x-request-lang': 'en'
       };
@@ -394,7 +394,14 @@ function movieBoxStreamOptions(data) {
   const rank = (item) => Number(String(item.resolution).match(/\d+/)?.[0] || 0);
   return unique.sort((a, b) => rank(b) - rank(a));
 }
-async function playMovieBoxEpisode(subjectId, se, ep, title) {
+function movieBoxPlaybackReferer(detailPath) {
+  const value = String(detailPath || '').trim();
+  if (!value) return 'https://movieboxph.org/';
+  if (/^https?:\\/\\//i.test(value)) return value;
+  if (value.startsWith('/')) return 'https://movieboxph.org' + value;
+  return 'https://movieboxph.org/play/' + value.replace(/^play\\//i, '');
+}
+async function playMovieBoxEpisode(subjectId, se, ep, title, detailPath = '') {
   const status = $('.mb-play-status');
   if (status) { status.style.display = 'block'; status.textContent = 'Refreshing session and loading video sources…'; }
   try {
@@ -406,7 +413,7 @@ async function playMovieBoxEpisode(subjectId, se, ep, title) {
     let lastAttemptError = null;
     for (const params of attempts) {
       try {
-        const payload = await movieBoxApiGet('play', { subjectId: String(subjectId), se: params.se, ep: params.ep });
+        const payload = await movieBoxApiGet('play', { subjectId: String(subjectId), detailPath: String(detailPath || ''), se: params.se, ep: params.ep });
         lastPayload = payload;
         const data = payload?.data || payload;
         options = movieBoxStreamOptions(data);
@@ -461,6 +468,7 @@ async function movieBoxDetailView(id) {
   view.innerHTML = spinner;
   const payload = await movieBoxApiGet('detail', { subjectId: String(id) });
   const data = payload.data || {}, subject = data.subject || {}, resource = data.resource || {};
+  const detailPath = String(subject.detailPath || '');
   const title = subject.title || subject.name || 'Untitled';
   const year = String(subject.releaseDate || '').slice(0, 4);
   const cover = movieBoxUrl(subject.cover);
@@ -488,7 +496,7 @@ async function movieBoxDetailView(id) {
   const actions = $('.mb-actions', page);
   const addPlay = (se, ep, label) => {
     const button = html('<button class="btn primary">▶ ' + esc(label) + '</button>');
-    button.onclick = () => playMovieBoxEpisode(String(id), se, ep, title + (label ? ' · ' + label : ''));
+    button.onclick = () => playMovieBoxEpisode(String(id), se, ep, title + (label ? ' · ' + label : ''), detailPath);
     actions.appendChild(button);
   };
   const listButton = html('<button class="btn">+ My List</button>');
@@ -516,7 +524,7 @@ async function movieBoxDetailView(id) {
       const maxEp = Math.max(0, Math.min(500, Number(season?.maxEp || 0)));
       for (let ep = 1; ep <= maxEp; ep++) {
         const item = html('<button class="ep" type="button" aria-label="Play Season ' + Number(seasonNo) + ' Episode ' + ep + '"><div class="still"><span class="ep-number">E' + ep + '</span></div><div class="b"><b>Episode ' + ep + '</b><small>Season ' + Number(seasonNo) + '</small></div></button>');
-        item.onclick = () => playMovieBoxEpisode(String(id), Number(seasonNo), ep, title + ' · S' + seasonNo + ' E' + ep);
+        item.onclick = () => playMovieBoxEpisode(String(id), Number(seasonNo), ep, title + ' · S' + seasonNo + ' E' + ep, detailPath);
         list.appendChild(item);
       }
     };
