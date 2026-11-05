@@ -92,7 +92,7 @@ function card(item, forced, opts = {}) {
   // Monochrome Lucide-style inline SVGs, matching the player's control-icon theme.
   const typeIcons = {
     PROMO: '<path d="m3 11 18-5v12L3 13v-2Z"/><path d="M11.6 15.8 13 21l-4-1-1.5-6"/><path d="M5 14v4a2 2 0 0 0 2 2h1"/>',
-    MOVIE: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="m5.6 5.6 4.3 4.3m4.2 4.2 4.3 4.3m0-12.8-4.3 4.3m-4.2 4.2-4.3 4.3"/>',
+    MOVIE: '<rect x="5" y="7" width="38" height="34" rx="3"/><path d="M5 15h38M5 33h38M12 7v8M24 7v8M36 7v8M12 33v8M24 33v8M36 33v8"/><path d="M20 19l11 6-11 6z"/>',
     SERIES: '<rect x="3" y="7" width="18" height="14" rx="2"/><path d="m7 3 5 4 5-4M8 12h8m-8 4h5"/>',
     TV_SHOW: '<rect x="3" y="7" width="18" height="14" rx="2"/><path d="m7 3 5 4 5-4M8 12h8m-8 4h5"/>',
     DOCUMENTARY: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m10 9 5 3-5 3V9Z"/>',
