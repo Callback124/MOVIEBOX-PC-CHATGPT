@@ -86,14 +86,16 @@ function card(item, forced, opts = {}) {
   const year = item.year ?? (item.release_date || item.first_air_date || '').slice(0, 4);
   const poster = item.poster ?? item.poster_path;
   const vote = item.vote ?? item.vote_average;
-  const href = `#/title/${esc(type)}/${item.id}`;
+  const href = item.moviebox ? `#/title/${esc(type)}/${encodeURIComponent(String(item.id))}` : `#/title/${esc(type)}/${item.id}`;
+  const identity = item.movieboxIdentity || (item.moviebox ? identifyMovieBoxCard(item) : null);
+  const typeBadge = identity ? `<span class="badge type">${esc(identity.badgeText)}</span>` : '';
   if (opts.rank) {
     return html(`<a class="card top10" href="${href}"><span class="num">${opts.rank}</span>
       <div class="tp">${poster ? `<img loading="lazy" alt="" src="${esc(img(poster))}">` : ''}</div></a>`);
   }
   return html(`<a class="card pos" href="${href}">
     <div class="poster">${poster ? `<img loading="lazy" alt="" src="${esc(img(poster))}">` : `<div class="noimg">${esc(title)}</div>`}
-      ${vote ? `<span class="badge rate">★ ${Number(vote).toFixed(1)}</span>` : ''}</div>
+      ${typeBadge}${voteStr}</div>
     <div class="t">${esc(title)}</div><div class="s">${esc(year)}</div></a>`);
 }
 
@@ -280,30 +282,44 @@ function movieBoxUrl(value) {
   if (typeof value === 'object') return value.url || value.src || value.imageUrl || value.coverUrl || '';
   return '';
 }
+function identifyMovieBoxCard(item = {}) {
+  const id = String(item.subjectId ?? item.subject_id ?? item.id ?? item.idStr ?? '');
+  const raw = item.subjectType ?? item.subject_type ?? item.type;
+  const type = Number(raw);
+  const corner = String(item.corner || '').toUpperCase();
+  const genre = String(item.genre || '').toUpperCase();
+  let category = 'MOVIE', badgeText = 'MOVIE', isSeries = false, isPlayable = true;
+  if (type === 0 || id === '' || id === '0') { category = 'PROMO'; badgeText = 'PROMO'; isPlayable = false; }
+  else if (type === 7 || corner.includes('SHORT') || genre.includes('SHORT')) { category = 'SHORT_DRAMA'; badgeText = 'SHORT DRAMA'; isSeries = true; }
+  else if (type === 5 || genre.includes('ANIME') || genre.includes('ANIMATION')) { category = 'ANIME'; badgeText = 'ANIME'; isSeries = true; }
+  else if (type === 2 || type === 4 || corner.includes('EP') || corner.includes('SEASON') || genre.includes('SERIES') || genre.includes('TV SHOW')) { category = 'SERIES'; badgeText = type === 4 ? 'TV SHOW' : 'TV SERIES'; isSeries = true; }
+  else if (type === 3 || genre.includes('DOCUMENTARY')) { category = 'DOCUMENTARY'; badgeText = 'DOCUMENTARY'; }
+  else if (type === 6 || genre.includes('MUSIC') || genre.includes('CONCERT')) { category = 'MUSIC'; badgeText = 'MUSIC'; }
+  else if (type === 9 || genre.includes('SPORT')) { category = 'SPORTS'; badgeText = 'SPORTS'; }
+  return { category, badgeText, isSeries, isPlayable, playParams: isSeries ? { se: 1, ep: 1 } : { se: 0, ep: 0 } };
+}
 function movieBoxItem(raw) {
   const source = raw && typeof raw === 'object' ? raw : {};
   const item = Object.assign({}, source, source.subject && typeof source.subject === 'object' ? source.subject : {});
   const pick = (...values) => values.map(movieBoxUrl).find(Boolean) || '';
-  const id = item.subjectId ?? item.subject_id ?? item.id ?? item.idStr ?? '';
-  const rawType = item.subjectType ?? item.subject_type ?? item.mediaType ?? item.type;
-  const type = /tv|series|show/i.test(String(rawType)) || Number(rawType) === 2 ? 'tv' : 'movie';
+  const id = String(item.subjectId ?? item.subject_id ?? item.id ?? item.idStr ?? '');
+  const identity = identifyMovieBoxCard({ ...item, subjectId: id });
+  const type = identity.isSeries ? 'tv' : 'movie';
   const poster = pick(item.coverVertical, item.verticalCover, item.poster, item.posterUrl, item.cover, item.coverUrl, item.image, item.thumbnail, item.pic);
   const backdrop = pick(source.image, source.banner, source.bannerImage, source.coverHorizontal, source.horizontalCover,
     item.coverHorizontal, item.horizontalCover, item.backdrop, item.backdropUrl, item.cover, item.image, poster);
   const date = item.releaseDate || item.release_date || item.year || item.releaseTime || '';
-  const year = String(date).match(/(19|20)\d{2}/)?.[0] || '';
-  const rating = Number(item.imdbRating ?? item.rating ?? item.score ?? item.voteAverage ?? item.vote_average ?? 0);
-  return {
-    ...item, id: String(id), type, media_type: type,
+  const year = String(date).match(/(19|20)\\d{2}/)?.[0] || '';
+  const rating = Number(item.imdbRatingValue ?? item.imdbRating ?? item.rating ?? item.score ?? item.voteAverage ?? item.vote_average ?? 0);
+  return { ...item, id, type, media_type: type, moviebox: true, movieboxIdentity: identity,
     title: item.title || item.name || item.subjectName || item.originalTitle || 'Untitled',
     name: item.title || item.name || item.subjectName || item.originalTitle || 'Untitled',
     poster_path: poster, poster, backdrop_path: backdrop,
     overview: item.description || item.introduction || item.overview || '',
     release_date: year, first_air_date: year,
-    vote_average: rating > 10 ? rating / 10 : rating,
-    genre_ids: []
-  };
+    vote_average: rating > 10 ? rating / 10 : rating, genre_ids: [] };
 }
+
 async function homeView() {
   view.innerHTML = spinner;
   try {
