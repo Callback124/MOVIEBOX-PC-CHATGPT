@@ -360,3 +360,23 @@ html{scroll-padding-top:90px;scroll-padding-bottom:60px}
 .mb-episodes .ep:hover .still,.mb-cast-wrap .person:hover .av{outline:2px solid #fff;outline-offset:-2px}
 .badge.type-icon{left:6px;bottom:6px;min-width:25px;height:25px;padding:2px 4px!important;display:grid;place-items:center;font-size:15px!important;line-height:1;background:rgba(0,0,0,.78)!important;backdrop-filter:blur(4px)}
 .badge.type-icon svg{display:block;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;color:#fff}
+
+
+/* MovieBox episode cards: image-only tiles, same hover enlargement as catalog cards */
+.mb-episodes .eps{overflow:visible!important;position:relative;isolation:isolate}
+.mb-episodes .ep{
+  position:relative!important;
+  transform:scale(1)!important;
+  transform-origin:center center!important;
+  transition:transform .18s ease,outline-color .18s ease,box-shadow .18s ease!important;
+  cursor:pointer!important;
+}
+.mb-episodes .ep:hover,
+.mb-episodes .ep:focus-visible{
+  transform:scale(1.12)!important;
+  z-index:20!important;
+  outline:2px solid #fff!important;
+  outline-offset:2px!important;
+  box-shadow:0 8px 24px rgba(0,0,0,.55)!important;
+}
+.mb-episodes .ep .b{display:none!important}
