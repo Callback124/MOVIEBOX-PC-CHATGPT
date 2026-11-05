@@ -92,7 +92,7 @@ function card(item, forced, opts = {}) {
   // Monochrome Lucide-style inline SVGs, matching the player's control-icon theme.
   const typeIcons = {
     PROMO: '<path d="m3 11 18-5v12L3 13v-2Z"/><path d="M11.6 15.8 13 21l-4-1-1.5-6"/><path d="M5 14v4a2 2 0 0 0 2 2h1"/>',
-    MOVIE: '<rect x="5" y="7" width="38" height="34" rx="3"/><path d="M5 15h38M5 33h38M12 7v8M24 7v8M36 7v8M12 33v8M24 33v8M36 33v8"/><path d="M20 19l11 6-11 6z"/>',
+    MOVIE: '<rect x="2.5" y="3.5" width="19" height="17" rx="1.5"/><path d="M2.5 7.5h19M2.5 16.5h19M6 3.5v4M12 3.5v4M18 3.5v4M6 16.5v4M12 16.5v4M18 16.5v4"/><path d="m10 9.5 5.5 3-5.5 3z"/>',
     SERIES: '<rect x="3" y="7" width="18" height="14" rx="2"/><path d="m7 3 5 4 5-4M8 12h8m-8 4h5"/>',
     TV_SHOW: '<rect x="3" y="7" width="18" height="14" rx="2"/><path d="m7 3 5 4 5-4M8 12h8m-8 4h5"/>',
     DOCUMENTARY: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m10 9 5 3-5 3V9Z"/>',
@@ -328,40 +328,71 @@ async function movieBoxApiGet(kind, params) {
 }
 function movieBoxStreamOptions(data) {
   const found = [];
-  const add = (value, kind, inherited = {}) => {
-    if (!value) return;
-    if (Array.isArray(value)) { value.forEach((v) => add(v, kind, inherited)); return; }
+  const streamKeys = /^(streams?|hls|dash|play|playback|video|videos|source|sources|quality|qualities|file|files|media|download)$/i;
+  const urlKeys = ['url', 'src', 'playUrl', 'streamUrl', 'fileUrl', 'uri', 'videoUrl', 'mediaUrl', 'downloadUrl', 'masterUrl'];
+  const kindFor = (key, url) => {
+    const ext = String(url || '').match(/\.(m3u8|mpd|mp4|m4v|webm|mov)(?:$|[?#])/i)?.[1]?.toUpperCase();
+    if (ext === 'M3U8') return 'HLS';
+    if (ext === 'MPD') return 'DASH';
+    if (ext) return 'MP4';
+    if (/hls/i.test(key)) return 'HLS';
+    if (/dash/i.test(key)) return 'DASH';
+    return 'STREAM';
+  };
+  const add = (value, key = 'data', context = false, inherited = {}) => {
+    if (value == null) return;
+    const streamContext = context || streamKeys.test(String(key));
+    if (Array.isArray(value)) {
+      value.forEach((entry) => add(entry, key, streamContext, inherited));
+      return;
+    }
     if (typeof value === 'string') {
-      if (/^https?:\/\//i.test(value)) found.push({ url: value, kind, ...inherited });
+      if (/^https?:\/\//i.test(value) && (streamContext || /\.(m3u8|mpd|mp4|m4v|webm|mov)(?:$|[?#])/i.test(value))) {
+        found.push({ url: value, kind: kindFor(key, value), ...inherited });
+      }
       return;
     }
     if (typeof value !== 'object') return;
-    const url = value.url || value.src || value.playUrl || value.streamUrl || value.fileUrl || value.uri;
-    if (typeof url === 'string' && /^https?:\/\//i.test(url)) {
-      const resolution = value.resolution || value.height || value.quality || inherited.resolution || '';
-      found.push({ url, kind, resolution: String(resolution), label: value.name || value.label || value.qualityName || '' });
-      return;
+    let candidate = '';
+    for (const field of urlKeys) {
+      if (typeof value[field] === 'string' && /^https?:\/\//i.test(value[field])) {
+        candidate = value[field];
+        break;
+      }
     }
-    Object.values(value).forEach((v) => add(v, kind, inherited));
+    if (candidate && (streamContext || /\.(m3u8|mpd|mp4|m4v|webm|mov)(?:$|[?#])/i.test(candidate))) {
+      const resolution = value.resolution || value.height || value.quality || value.definition || inherited.resolution || '';
+      const label = value.name || value.label || value.qualityName || value.definitionName || inherited.label || '';
+      found.push({ url: candidate, kind: kindFor(key, candidate), resolution: String(resolution), label: String(label) });
+    }
+    for (const [childKey, childValue] of Object.entries(value)) {
+      if (urlKeys.includes(childKey) && typeof childValue === 'string') continue;
+      add(childValue, childKey, streamContext, {
+        resolution: value.resolution || value.height || value.quality || inherited.resolution || '',
+        label: value.name || value.label || inherited.label || ''
+      });
+    }
   };
-  add(data?.streams, 'MP4'); add(data?.hls, 'HLS'); add(data?.dash, 'DASH');
-  const unique = [...new Map(found.map((x) => [x.url, x])).values()];
-  const rank = (x) => Number(String(x.resolution).match(/\d+/)?.[0] || 0);
+  add(data);
+  const unique = [...new Map(found.map((item) => [item.url, item])).values()];
+  const rank = (item) => Number(String(item.resolution).match(/\d+/)?.[0] || 0);
   return unique.sort((a, b) => rank(b) - rank(a));
 }
 async function playMovieBoxEpisode(subjectId, se, ep, title) {
-  openModal('<div class="center"><div class="spinner"></div><p>Loading available video sources…</p></div>');
+  const status = $('.mb-play-status');
+  if (status) { status.style.display = 'block'; status.textContent = 'Loading video sources…'; }
   try {
     const payload = await movieBoxApiGet('play', { subjectId, se, ep });
-    const options = movieBoxStreamOptions(payload.data || {});
-    if (!options.length) throw new Error('No playable stream URL was returned for this episode.');
-    closeModal();
+    const options = movieBoxStreamOptions(payload.data || payload);
+    if (!options.length) throw new Error('The Play API returned no direct MP4, HLS or DASH stream URL. Check the Play API response structure/session.');
     const start = (source) => {
-      if (typeof window.MB_play !== 'function') throw new Error('Player module is not ready.');
+      if (typeof window.MB_play !== 'function') throw new Error('Built-in player module is not ready.');
+      if (status) { status.style.display = 'none'; status.textContent = ''; }
       window.MB_play({ src: source.url, title: title + (source.label || source.resolution ? ' · ' + (source.label || source.resolution) : '') });
     };
     if (options.length === 1) start(options[0]);
     else {
+      if (status) { status.style.display = 'none'; status.textContent = ''; }
       openModal('<h2 style="margin-top:0">Select video quality</h2><div class="source-list">' +
         options.map((x, i) => '<button class="btn source-option" data-source="' + i + '">' +
           esc(x.label || x.resolution || x.kind) + ' · ' + esc(x.kind) + '</button>').join('') + '</div>', 'small');
@@ -370,7 +401,8 @@ async function playMovieBoxEpisode(subjectId, se, ep, title) {
       });
     }
   } catch (error) {
-    openModal('<div class="center"><h3>Unable to start playback</h3><p>' + esc(error.message) + '</p></div>', 'small');
+    if (status) { status.style.display = 'block'; status.textContent = 'Playback error: ' + error.message; }
+    else console.error('MovieBox playback error:', error);
   }
 }
 async function movieBoxDetailView(id) {
@@ -389,7 +421,7 @@ async function movieBoxDetailView(id) {
   pushHistory(historyItem);
   view.innerHTML = '';
   const page = html('<div><div class="backdrop"></div><div class="d-wrap"><div class="d-poster"></div><div class="d-info">' +
-    '<h1 class="mb-title"></h1><div class="meta mb-meta"></div><div class="mb-actions"></div>' +
+    '<h1 class="mb-title"></h1><div class="meta mb-meta"></div><div class="mb-actions"></div><p class="note mb-play-status" style="display:none" aria-live="polite"></p>' +
     '<h3 class="h-sm">Synopsis</h3><p class="mb-description"></p></div></div>' +
     '<div class="mb-cast-wrap"><h3 class="h-sm pad" style="margin-top:28px">Cast</h3><div class="cast mb-cast"></div></div>' +
     '<div class="mb-episodes"></div></div>');
