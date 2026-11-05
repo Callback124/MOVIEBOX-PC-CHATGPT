@@ -359,3 +359,4 @@ html{scroll-padding-top:90px;scroll-padding-bottom:60px}
 .mb-episodes .ep small{display:block;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mb-episodes .ep:hover .still,.mb-cast-wrap .person:hover .av{outline:2px solid #fff;outline-offset:-2px}
 .badge.type-icon{left:6px;bottom:6px;min-width:25px;height:25px;padding:2px 4px!important;display:grid;place-items:center;font-size:15px!important;line-height:1;background:rgba(0,0,0,.78)!important;backdrop-filter:blur(4px)}
+.badge.type-icon svg{display:block;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;color:#fff}
