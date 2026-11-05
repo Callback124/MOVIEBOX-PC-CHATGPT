@@ -89,7 +89,8 @@ function card(item, forced, opts = {}) {
   const voteStr = Number(vote) > 0 ? `<span class="badge rate">★ ${Number(vote).toFixed(1)}</span>` : '';
   const href = item.moviebox ? `#/title/moviebox/${encodeURIComponent(String(item.id))}` : `#/title/${esc(type)}/${item.id}`;
   const identity = item.movieboxIdentity || (item.moviebox ? identifyMovieBoxCard(item) : null);
-  const typeBadge = identity ? `<span class="badge type">${esc(identity.badgeText)}</span>` : '';
+  const typeIcons = { PROMO: '📢', MOVIE: '🎬', SERIES: '📺', DOCUMENTARY: '🎞️', MUSIC: '🎵', SPORTS: '🏟️', ANIME: '🎌', SHORT_DRAMA: '🎭' };
+  const typeBadge = identity ? `<span class="badge type type-icon" title="${esc(identity.badgeText)}" aria-label="${esc(identity.badgeText)}">${typeIcons[identity.category] || '🎬'}</span>` : '';
   if (opts.rank) {
     return html(`<a class="card top10" href="${href}"><span class="num">${opts.rank}</span>
       <div class="tp">${poster ? `<img loading="lazy" alt="" src="${esc(img(poster))}">` : ''}</div></a>`);
@@ -403,7 +404,7 @@ async function movieBoxDetailView(id) {
   const castBox = $('.mb-cast', page);
   stars.slice(0, 18).forEach((person) => {
     const avatar = person.avatarUrl || '';
-    castBox.appendChild(html('<div class="person"><div class="av">' + (avatar ? '<img loading="lazy" alt="" src="' + esc(avatar) + '">' : '') +
+    castBox.appendChild(html('<div class="person"><div class="av">' + (avatar ? '<img loading="lazy" alt="" src="' + esc(avatar) + '">' : '<span class="cast-placeholder">👤</span>') +
       '</div><b>' + esc(person.name || '') + '</b><small>' + esc(person.character || '') + '</small></div>'));
   });
   if (!stars.length) $('.mb-cast-wrap', page).remove();
@@ -419,7 +420,7 @@ async function movieBoxDetailView(id) {
       const list = $('#mb-episode-list', episodesBox); list.innerHTML = '';
       const maxEp = Math.max(0, Math.min(500, Number(season?.maxEp || 0)));
       for (let ep = 1; ep <= maxEp; ep++) {
-        const item = html('<button class="ep" type="button"><div class="still">E' + ep + '</div><div class="b"><b>Episode ' + ep + '</b><small>Season ' + Number(seasonNo) + '</small></div></button>');
+        const item = html('<button class="ep" type="button" aria-label="Play Season ' + Number(seasonNo) + ' Episode ' + ep + '"><div class="still"><span class="ep-number">E' + ep + '</span></div><div class="b"><b>Episode ' + ep + '</b><small>Season ' + Number(seasonNo) + '</small></div></button>');
         item.onclick = () => playMovieBoxEpisode(String(id), Number(seasonNo), ep, title + ' · S' + seasonNo + ' E' + ep);
         list.appendChild(item);
       }
