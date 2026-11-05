@@ -324,7 +324,7 @@ async function movieBoxApiGet(kind, params) {
         Accept: '*/*',
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36',
         Origin: 'https://movieboxph.org',
-        Referer: movieBoxPlaybackReferer(detailPath),
+        Referer: movieBoxPlaybackReferer(params.detailPath),
         'x-client-info': JSON.stringify({ timezone: 'Asia/Calcutta' }),
         'x-request-lang': 'en'
       };
@@ -395,11 +395,12 @@ function movieBoxStreamOptions(data) {
   return unique.sort((a, b) => rank(b) - rank(a));
 }
 function movieBoxPlaybackReferer(detailPath) {
-  const value = String(detailPath || '').trim();
+  let value = String(detailPath || '').trim();
   if (!value) return 'https://movieboxph.org/';
-  if (/^https?:\\/\\//i.test(value)) return value;
+  if (value.startsWith('https://') || value.startsWith('http://')) return value;
   if (value.startsWith('/')) return 'https://movieboxph.org' + value;
-  return 'https://movieboxph.org/play/' + value.replace(/^play\\//i, '');
+  if (value.toLowerCase().startsWith('play/')) value = value.slice(5);
+  return 'https://movieboxph.org/play/' + value;
 }
 async function playMovieBoxEpisode(subjectId, se, ep, title, detailPath = '') {
   const status = $('.mb-play-status');
