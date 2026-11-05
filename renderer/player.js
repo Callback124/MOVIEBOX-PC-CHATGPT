@@ -262,11 +262,27 @@
     q('#mbpl').focus({ preventScroll: true }); wake();
   }
 
-  function play(o) {
+  async function play(o) {
     const n = native();
     if (n && /^https?:\/\//i.test(o.src)) {
-      n.play({ url: o.src, title: o.title || '', position: store.get('mbp:pos:' + o.src, 0), format: o.format || '', headers: o.headers || {} }).catch((error) => alert('Native ExoPlayer could not start: ' + (error?.message || 'Unknown error')));
-    } else openHtml5(o);
+      try {
+        await n.play({
+          url: o.src,
+          title: o.title || '',
+          position: store.get('mbp:pos:' + o.src, 0),
+          format: o.format || '',
+          headers: o.headers || {}
+        });
+        return true;
+      } catch (error) {
+        throw new Error('Native ExoPlayer launch failed: ' + (error?.message || 'Unknown plugin error'));
+      }
+    }
+    if (window.Capacitor?.getPlatform?.() === 'android') {
+      throw new Error('Android ExoPlayer plugin is unavailable. This APK may be an older build.');
+    }
+    openHtml5(o);
+    return true;
   }
 
   /* ---------- Internet Archive (free movies) ---------- */
