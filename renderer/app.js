@@ -89,8 +89,18 @@ function card(item, forced, opts = {}) {
   const voteStr = Number(vote) > 0 ? `<span class="badge rate">★ ${Number(vote).toFixed(1)}</span>` : '';
   const href = item.moviebox ? `#/title/moviebox/${encodeURIComponent(String(item.id))}` : `#/title/${esc(type)}/${item.id}`;
   const identity = item.movieboxIdentity || (item.moviebox ? identifyMovieBoxCard(item) : null);
-  const typeIcons = { PROMO: '📢', MOVIE: '🎬', SERIES: '📺', DOCUMENTARY: '🎞️', MUSIC: '🎵', SPORTS: '🏟️', ANIME: '🎌', SHORT_DRAMA: '🎭' };
-  const typeBadge = identity ? `<span class="badge type type-icon" title="${esc(identity.badgeText)}" aria-label="${esc(identity.badgeText)}">${typeIcons[identity.category] || '🎬'}</span>` : '';
+  // Monochrome Lucide-style inline SVGs, matching the player's control-icon theme.
+  const typeIcons = {
+    PROMO: '<path d="m3 11 18-5v12L3 13v-2Z"/><path d="M11.6 15.8 13 21l-4-1-1.5-6"/><path d="M5 14v4a2 2 0 0 0 2 2h1"/>',
+    MOVIE: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 3v18M17 3v18M3 8h4m-4 8h4m10-8h4m-4 8h4"/>',
+    SERIES: '<rect x="3" y="7" width="18" height="14" rx="2"/><path d="m7 3 5 4 5-4M8 12h8m-8 4h5"/>',
+    DOCUMENTARY: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m10 9 5 3-5 3V9Z"/>',
+    MUSIC: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+    SPORTS: '<path d="M12 3 21 8v8l-9 5-9-5V8l9-5Z"/><path d="m8 10 4-3 4 3-1.5 5h-5L8 10Z"/>',
+    ANIME: '<path d="M12 3 14.5 8 20 9l-4 4 .8 6L12 16l-4.8 3L8 13l-4-4 5.5-1L12 3Z"/><path d="M9 11h.01M15 11h.01"/>',
+    SHORT_DRAMA: '<path d="M4 4h16v12H8l-4 4V4Z"/><path d="m10 8 5 2-5 2V8Z"/>'
+  };
+  const typeBadge = identity ? `<span class="badge type type-icon" title="${esc(identity.badgeText)}" aria-label="${esc(identity.badgeText)}"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${typeIcons[identity.category] || typeIcons.MOVIE}</svg></span>` : '';
   if (opts.rank) {
     return html(`<a class="card top10" href="${href}"><span class="num">${opts.rank}</span>
       <div class="tp">${poster ? `<img loading="lazy" alt="" src="${esc(img(poster))}">` : ''}</div></a>`);
