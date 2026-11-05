@@ -403,19 +403,22 @@ async function playMovieBoxEpisode(subjectId, se, ep, title) {
     attempts.push(alternate);
     let options = [];
     let lastPayload = null;
-    let used = attempts[0];
+    let lastAttemptError = null;
     for (const params of attempts) {
-      used = params;
-      const payload = await movieBoxApiGet('play', { subjectId: String(subjectId), se: params.se, ep: params.ep });
-      lastPayload = payload;
-      const data = payload?.data || payload;
-      options = movieBoxStreamOptions(data);
-      if (options.length) break;
-      // Try the alternate parameter pair whenever this response contains no usable URL.
+      try {
+        const payload = await movieBoxApiGet('play', { subjectId: String(subjectId), se: params.se, ep: params.ep });
+        lastPayload = payload;
+        const data = payload?.data || payload;
+        options = movieBoxStreamOptions(data);
+        if (options.length) break;
+      } catch (attemptError) {
+        lastAttemptError = attemptError;
+      }
+      // Retry with the alternate pair even when the first API request itself fails.
     }
     if (!options.length) {
       const data = lastPayload?.data || lastPayload || {};
-      const apiMessage = lastPayload?.message || data?.message || 'No direct stream URL was returned';
+      const apiMessage = lastPayload?.message || data?.message || lastAttemptError?.message || 'No direct stream URL was returned';
       throw new Error(apiMessage + ' (hasResource: ' + String(data?.hasResource) + '; tried se=' + attempts.map(x => x.se + ',ep=' + x.ep).join(' and ') + ')');
     }
     const start = (source) => {
