@@ -41,7 +41,7 @@ async function api(path, params = {}) {
   cache.set(ck, data);
   return data;
 }
-const img = (p, size = 'w342') => (p ? IMG + size + p : '');
+const img = (p, size = 'w342') => (p ? (/^https?:\/\//i.test(String(p)) ? String(p) : IMG + size + p) : '');
 const region = () => store.get('region', 'IN');
 
 let genreMap = null;
@@ -184,51 +184,110 @@ $('#btn-settings').onclick = openSettings;
 
 /* ---------- views ---------- */
 let heroTimer = null;
+const MOVIEBOX_HOME_ENDPOINTS = [
+  'https://h5-api.aoneroom.com/wefeed-h5api-bff/home',
+  'https://movieboxph.org/wefeed-h5api-bff/home'
+];
+const MOVIEBOX_HOME_HEADERS = {
+  'Accept': '*/*',
+  'Accept-Language': 'en-US,en;q=0.9',
+  'x-client-info': JSON.stringify({ timezone: 'Asia/Calcutta' })
+};
+async function fetchMovieBoxHome() {
+  const nativeApi = window.Capacitor?.Plugins?.MovieBoxHomeApi;
+  if (nativeApi?.getHome) {
+    const result = await nativeApi.getHome();
+    const payload = result?.response || result;
+    if (payload?.data) return payload;
+    throw new Error(payload?.message || 'MovieBox Home API returned no data');
+  }
+  let lastError;
+  for (const endpoint of MOVIEBOX_HOME_ENDPOINTS) {
+    try {
+      const response = await fetch(endpoint, { method: 'GET', headers: MOVIEBOX_HOME_HEADERS, cache: 'no-store' });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      const payload = await response.json();
+      if (!payload?.data) throw new Error('Unexpected Home API response');
+      return payload;
+    } catch (error) { lastError = error; }
+  }
+  throw new Error('MovieBox Home API unavailable. ' + (lastError?.message || 'Network error'));
+}
+function movieBoxUrl(value) {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object') return value.url || value.src || value.imageUrl || value.coverUrl || '';
+  return '';
+}
+function movieBoxItem(raw) {
+  const source = raw && typeof raw === 'object' ? raw : {};
+  const item = Object.assign({}, source, source.subject && typeof source.subject === 'object' ? source.subject : {});
+  const pick = (...values) => values.map(movieBoxUrl).find(Boolean) || '';
+  const id = item.subjectId ?? item.subject_id ?? item.id ?? item.idStr ?? '';
+  const rawType = item.subjectType ?? item.subject_type ?? item.mediaType ?? item.type;
+  const type = /tv|series|show/i.test(String(rawType)) || Number(rawType) === 2 ? 'tv' : 'movie';
+  const poster = pick(item.coverVertical, item.verticalCover, item.poster, item.posterUrl, item.cover, item.coverUrl, item.image, item.thumbnail, item.pic);
+  const backdrop = pick(source.image, source.banner, source.bannerImage, source.coverHorizontal, source.horizontalCover,
+    item.coverHorizontal, item.horizontalCover, item.backdrop, item.backdropUrl, item.cover, item.image, poster);
+  const date = item.releaseDate || item.release_date || item.year || item.releaseTime || '';
+  const year = String(date).match(/(19|20)\d{2}/)?.[0] || '';
+  const rating = Number(item.imdbRating ?? item.rating ?? item.score ?? item.voteAverage ?? item.vote_average ?? 0);
+  return {
+    ...item, id: String(id), type, media_type: type,
+    title: item.title || item.name || item.subjectName || item.originalTitle || 'Untitled',
+    name: item.title || item.name || item.subjectName || item.originalTitle || 'Untitled',
+    poster_path: poster, poster, backdrop_path: backdrop,
+    overview: item.description || item.introduction || item.overview || '',
+    release_date: year, first_air_date: year,
+    vote_average: rating > 10 ? rating / 10 : rating,
+    genre_ids: []
+  };
+}
 async function homeView() {
   view.innerHTML = spinner;
-  await genres();
-  const [trend, pm, top, ptv, anime, hindi, up] = await Promise.all([
-    api('/trending/all/day'), api('/movie/popular'), api('/movie/top_rated'), api('/tv/popular'),
-    api('/discover/tv', { with_genres: 16, with_original_language: 'ja', sort_by: 'popularity.desc' }),
-    api('/discover/movie', { with_original_language: 'hi', sort_by: 'popularity.desc', 'vote_count.gte': 50 }),
-    api('/movie/upcoming', { region: region() })
-  ]);
-  view.innerHTML = '';
-  const slides = trend.results.filter((x) => x.backdrop_path && x.media_type !== 'person').slice(0, 7);
-  const hero = html('<div class="hero"><div class="dots"></div></div>');
-  slides.forEach((s, i) => {
-    const type = s.media_type, title = s.title || s.name;
-    const el = html(`<div class="slide ${i === 0 ? 'on' : ''}"><div class="info">
-      <h2>${esc(title)}</h2>
-      <div class="meta"><span class="match">${Math.round(s.vote_average * 10)}% Match</span><span>${esc((s.release_date || s.first_air_date || '').slice(0, 4))}</span><span class="age">HD</span><span>${esc((genreMap[s.genre_ids?.[0]]) || '')}</span></div>
-      <p>${esc(s.overview)}</p>
-      <div class="hbtns"><button class="hb play" data-t="${type}" data-id="${s.id}">▶ Play Trailer</button><a class="hb more" href="#/title/${type}/${s.id}">ⓘ More Info</a></div></div></div>`);
-    el.style.backgroundImage = `url(${img(s.backdrop_path, 'original')})`;
-    $('button.play', el).onclick = (e) => watchTrailer(e.currentTarget.dataset.t, e.currentTarget.dataset.id);
-    hero.insertBefore(el, $('.dots', hero));
-    const dot = document.createElement('i'); if (i === 0) dot.className = 'on';
-    dot.onclick = () => go(i); $('.dots', hero).appendChild(dot);
-  });
-  let cur = 0;
-  function go(i) {
-    cur = i;
-    hero.querySelectorAll('.slide').forEach((n, k) => n.classList.toggle('on', k === i));
-    hero.querySelectorAll('.dots i').forEach((n, k) => n.classList.toggle('on', k === i));
+  try {
+    const payload = await fetchMovieBoxHome();
+    const data = payload.data || {};
+    const operatingList = Array.isArray(data.operatingList) ? data.operatingList : [];
+    const bannerBlock = operatingList[0]?.banner;
+    const bannerItems = Array.isArray(bannerBlock?.items) ? bannerBlock.items : [];
+    const slides = bannerItems.map(movieBoxItem).filter((x) => x.backdrop_path || x.poster_path).slice(0, 7);
+    const sections = operatingList.slice(1).map((op) => ({
+      title: op.title || op.name || op.subjectTitle || op.label || 'Recommended',
+      items: (Array.isArray(op.subjects) ? op.subjects : []).map(movieBoxItem).filter((x) => x.poster_path)
+    })).filter((section) => section.items.length);
+    if (!slides.length && !sections.length) throw new Error('The Home API returned no banners or subject rows.');
+    view.innerHTML = '';
+    const hero = html('<div class="hero"><div class="dots"></div></div>');
+    slides.forEach((s, i) => {
+      const title = s.title || s.name;
+      const el = html(`<div class="slide ${i === 0 ? 'on' : ''}"><div class="info">
+        <h2>${esc(title)}</h2>
+        <div class="meta"><span class="match">${s.vote_average ? Math.round(s.vote_average * 10) + '% Match' : 'Featured'}</span><span>${esc(s.release_date || '')}</span><span class="age">HD</span></div>
+        <p>${esc(s.overview)}</p>
+        <div class="hbtns"><button class="hb play" data-id="${esc(s.id)}">▶ Play Trailer</button><a class="hb more" href="#/title/${esc(s.type)}/${encodeURIComponent(s.id)}">ⓘ More Info</a></div></div></div>`);
+      el.style.backgroundImage = `url("${String(s.backdrop_path || s.poster_path).replace(/["\\\\]/g, '')}")`;
+      $('button.play', el).onclick = () => {
+        openModal('<div class="center">Trailer lookup is not provided by the Home API.</div>', 'small');
+      };
+      hero.insertBefore(el, $('.dots', hero));
+      const dot = document.createElement('i'); if (i === 0) dot.className = 'on';
+      dot.onclick = () => go(i); $('.dots', hero).appendChild(dot);
+    });
+    let cur = 0;
+    function go(i) {
+      cur = i;
+      hero.querySelectorAll('.slide').forEach((n, k) => n.classList.toggle('on', k === i));
+      hero.querySelectorAll('.dots i').forEach((n, k) => n.classList.toggle('on', k === i));
+    }
+    clearInterval(heroTimer);
+    heroTimer = setInterval(() => { if (!document.hidden && slides.length) go((cur + 1) % slides.length); }, 7000);
+    if (slides.length) view.appendChild(hero);
+    sections.forEach((section, index) => view.appendChild(row(section.title, section.items, null, null, { top: index === 0 && /top\s*10/i.test(section.title) })));
+  } catch (error) {
+    showError(error);
   }
-  clearInterval(heroTimer);
-  heroTimer = setInterval(() => { if (!document.hidden && slides.length) go((cur + 1) % slides.length); }, 7000);
-  view.appendChild(hero);
-  const t10 = trend.results.filter((x) => x.media_type !== 'person' && x.poster_path);
-  view.appendChild(row('Top 10 Today', t10, null, '#/browse/trending/0', { top: true }));
-  view.appendChild(row('Trending Now', trend.results.filter((x) => x.media_type !== 'person'), null, '#/browse/trending/1'));
-  view.appendChild(row('Popular Movies', pm.results, 'movie', '#/browse/movie/0'));
-  view.appendChild(row('Popular TV Shows', ptv.results, 'tv', '#/browse/tv/0'));
-  view.appendChild(row('Hindi Movies', hindi.results, 'movie', '#/browse/regional/0'));
-  view.appendChild(row('Anime Series', anime.results, 'tv', '#/browse/anime/0'));
-  view.appendChild(row('Top Rated Movies', top.results, 'movie', '#/browse/movie/1'));
-  view.appendChild(row('Coming Soon', up.results, 'movie', '#/browse/movie/3'));
 }
-
 const BROWSE = {
   trending: { title: 'Trending', cats: [['Today', '/trending/all/day', {}, null], ['This Week', '/trending/all/week', {}, null]] },
   movie: { title: 'Movies', cats: [
