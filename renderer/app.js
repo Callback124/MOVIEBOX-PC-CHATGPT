@@ -87,7 +87,7 @@ function card(item, forced, opts = {}) {
   const poster = item.poster ?? item.poster_path;
   const vote = item.vote ?? item.vote_average;
   const voteStr = Number(vote) > 0 ? `<span class="badge rate">★ ${Number(vote).toFixed(1)}</span>` : '';
-  const href = item.moviebox ? `#/title/${esc(type)}/${encodeURIComponent(String(item.id))}` : `#/title/${esc(type)}/${item.id}`;
+  const href = item.moviebox ? `#/title/moviebox/${encodeURIComponent(String(item.id))}` : `#/title/${esc(type)}/${item.id}`;
   const identity = item.movieboxIdentity || (item.moviebox ? identifyMovieBoxCard(item) : null);
   const typeBadge = identity ? `<span class="badge type">${esc(identity.badgeText)}</span>` : '';
   if (opts.rank) {
@@ -277,6 +277,161 @@ async function movieBoxSearchRequest(kind, keyword, page = 1) {
   }
   throw new Error('MovieBox search API unavailable. ' + (lastError?.message || 'Network error'));
 }
+
+async function movieBoxApiGet(kind, params) {
+  let token = (window.__movieBoxSessionToken || store.get('movieboxToken', '') || '').trim();
+  const nativeApi = window.Capacitor?.Plugins?.MovieBoxHomeApi;
+  if (!token && nativeApi?.getHome) {
+    const homeResult = await nativeApi.getHome();
+    token = (homeResult?.token || '').trim();
+    if (token) { window.__movieBoxSessionToken = token; store.set('movieboxToken', token); }
+  }
+  if (nativeApi) {
+    const method = kind === 'detail' ? nativeApi.detail : nativeApi.play;
+    if (typeof method !== 'function') throw new Error('MovieBox native API bridge is outdated. Rebuild the Android app.');
+    const result = await method({ ...params, token });
+    const payload = result?.response || result;
+    if (payload?.data) return payload;
+    throw new Error(payload?.message || 'MovieBox API returned no data');
+  }
+  const path = kind === 'detail'
+    ? 'detail?subjectId=' + encodeURIComponent(params.subjectId)
+    : 'subject/play?subjectId=' + encodeURIComponent(params.subjectId) + '&se=' + encodeURIComponent(params.se) + '&ep=' + encodeURIComponent(params.ep);
+  const bases = kind === 'detail'
+    ? ['https://h5-api.aoneroom.com/wefeed-h5api-bff/', 'https://movieboxph.org/wefeed-h5api-bff/']
+    : ['https://movieboxph.org/wefeed-h5api-bff/', 'https://h5-api.aoneroom.com/wefeed-h5api-bff/'];
+  let lastError;
+  for (const base of bases) {
+    try {
+      const headers = { Accept: '*/*', 'x-client-info': JSON.stringify({ timezone: 'Asia/Calcutta' }), 'x-request-lang': 'en' };
+      if (token) headers.Authorization = 'Bearer ' + token;
+      const response = await fetch(base + path, { method: 'GET', headers, cache: 'no-store' });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      const payload = await response.json();
+      if (payload?.code !== 0 || !payload?.data) throw new Error(payload?.message || 'Unexpected MovieBox response');
+      return payload;
+    } catch (error) { lastError = error; }
+  }
+  throw new Error('MovieBox ' + kind + ' API unavailable. ' + (lastError?.message || 'Network/CORS error'));
+}
+function movieBoxStreamOptions(data) {
+  const found = [];
+  const add = (value, kind, inherited = {}) => {
+    if (!value) return;
+    if (Array.isArray(value)) { value.forEach((v) => add(v, kind, inherited)); return; }
+    if (typeof value === 'string') {
+      if (/^https?:\/\//i.test(value)) found.push({ url: value, kind, ...inherited });
+      return;
+    }
+    if (typeof value !== 'object') return;
+    const url = value.url || value.src || value.playUrl || value.streamUrl || value.fileUrl || value.uri;
+    if (typeof url === 'string' && /^https?:\/\//i.test(url)) {
+      const resolution = value.resolution || value.height || value.quality || inherited.resolution || '';
+      found.push({ url, kind, resolution: String(resolution), label: value.name || value.label || value.qualityName || '' });
+      return;
+    }
+    Object.values(value).forEach((v) => add(v, kind, inherited));
+  };
+  add(data?.streams, 'MP4'); add(data?.hls, 'HLS'); add(data?.dash, 'DASH');
+  const unique = [...new Map(found.map((x) => [x.url, x])).values()];
+  const rank = (x) => Number(String(x.resolution).match(/\d+/)?.[0] || 0);
+  return unique.sort((a, b) => rank(b) - rank(a));
+}
+async function playMovieBoxEpisode(subjectId, se, ep, title) {
+  openModal('<div class="center"><div class="spinner"></div><p>Loading available video sources…</p></div>');
+  try {
+    const payload = await movieBoxApiGet('play', { subjectId, se, ep });
+    const options = movieBoxStreamOptions(payload.data || {});
+    if (!options.length) throw new Error('No playable stream URL was returned for this episode.');
+    closeModal();
+    const start = (source) => {
+      if (typeof window.MB_play !== 'function') throw new Error('Player module is not ready.');
+      window.MB_play({ src: source.url, title: title + (source.label || source.resolution ? ' · ' + (source.label || source.resolution) : '') });
+    };
+    if (options.length === 1) start(options[0]);
+    else {
+      openModal('<h2 style="margin-top:0">Select video quality</h2><div class="source-list">' +
+        options.map((x, i) => '<button class="btn source-option" data-source="' + i + '">' +
+          esc(x.label || x.resolution || x.kind) + ' · ' + esc(x.kind) + '</button>').join('') + '</div>', 'small');
+      modal.querySelectorAll('[data-source]').forEach((button) => {
+        button.onclick = () => { const selected = options[Number(button.dataset.source)]; closeModal(); start(selected); };
+      });
+    }
+  } catch (error) {
+    openModal('<div class="center"><h3>Unable to start playback</h3><p>' + esc(error.message) + '</p></div>', 'small');
+  }
+}
+async function movieBoxDetailView(id) {
+  view.innerHTML = spinner;
+  const payload = await movieBoxApiGet('detail', { subjectId: String(id) });
+  const data = payload.data || {}, subject = data.subject || {}, resource = data.resource || {};
+  const title = subject.title || subject.name || 'Untitled';
+  const year = String(subject.releaseDate || '').slice(0, 4);
+  const cover = movieBoxUrl(subject.cover);
+  const backdrop = movieBoxUrl(subject.stills) || cover;
+  const identity = identifyMovieBoxCard({ ...subject, subjectId: id });
+  const rating = Number(subject.imdbRatingValue || 0);
+  const seasons = Array.isArray(resource.seasons) ? resource.seasons : [];
+  const historyItem = { id: String(id), type: 'moviebox', title, name: title, poster: cover, poster_path: cover,
+    year, vote: rating, moviebox: true, movieboxIdentity: identity };
+  pushHistory(historyItem);
+  view.innerHTML = '';
+  const page = html('<div><div class="backdrop"></div><div class="d-wrap"><div class="d-poster"></div><div class="d-info">' +
+    '<h1 class="mb-title"></h1><div class="meta mb-meta"></div><div class="mb-actions"></div>' +
+    '<h3 class="h-sm">Synopsis</h3><p class="mb-description"></p></div></div>' +
+    '<div class="mb-cast-wrap"><h3 class="h-sm pad" style="margin-top:28px">Cast</h3><div class="cast mb-cast"></div></div>' +
+    '<div class="mb-episodes"></div></div>');
+  $('.backdrop', page).style.backgroundImage = backdrop ? 'url("' + String(backdrop).replace(/["\\]/g, '') + '")' : 'none';
+  $('.d-poster', page).innerHTML = cover ? '<img alt="" src="' + esc(cover) + '">' : '';
+  $('.mb-title', page).textContent = title + (year ? ' (' + year + ')' : '');
+  $('.mb-meta', page).innerHTML = '<span class="pill type">' + esc(identity.badgeText) + '</span>' +
+    (rating ? '<span class="pill rate">★ ' + rating.toFixed(1) + '</span>' : '') +
+    (subject.duration ? '<span>' + esc(subject.duration) + '</span>' : '') +
+    (year ? '<span>' + esc(year) + '</span>' : '');
+  $('.mb-description', page).textContent = subject.description || 'No synopsis available.';
+  const actions = $('.mb-actions', page);
+  const addPlay = (se, ep, label) => {
+    const button = html('<button class="btn primary">▶ ' + esc(label) + '</button>');
+    button.onclick = () => playMovieBoxEpisode(String(id), se, ep, title + (label ? ' · ' + label : ''));
+    actions.appendChild(button);
+  };
+  const listButton = html('<button class="btn">+ My List</button>');
+  const syncList = () => { listButton.textContent = myList.has('moviebox', String(id)) ? '✓ In My List' : '+ My List'; };
+  syncList(); listButton.onclick = () => { myList.toggle(historyItem); syncList(); }; actions.appendChild(listButton);
+  if (!identity.isSeries) addPlay(0, 0, 'Watch Now');
+  const stars = Array.isArray(data.stars) ? data.stars : [];
+  const castBox = $('.mb-cast', page);
+  stars.slice(0, 18).forEach((person) => {
+    const avatar = person.avatarUrl || '';
+    castBox.appendChild(html('<div class="person"><div class="av">' + (avatar ? '<img loading="lazy" alt="" src="' + esc(avatar) + '">' : '') +
+      '</div><b>' + esc(person.name || '') + '</b><small>' + esc(person.character || '') + '</small></div>'));
+  });
+  if (!stars.length) $('.mb-cast-wrap', page).remove();
+  const episodesBox = $('.mb-episodes', page);
+  if (identity.isSeries && seasons.length) {
+    const usable = seasons.filter((s) => Number(s.se) > 0 && Number(s.maxEp) > 0);
+    const seasonList = usable.length ? usable : seasons;
+    episodesBox.innerHTML = '<div class="section-head"><h3>Episodes</h3><select class="sel" id="mb-season">' +
+      seasonList.map((s) => '<option value="' + Number(s.se) + '">Season ' + Number(s.se) + ' · ' + Number(s.maxEp || 0) + ' Episodes</option>').join('') +
+      '</select></div><div class="eps" id="mb-episode-list"></div>';
+    const renderEpisodes = (seasonNo) => {
+      const season = seasonList.find((s) => Number(s.se) === Number(seasonNo));
+      const list = $('#mb-episode-list', episodesBox); list.innerHTML = '';
+      const maxEp = Math.max(0, Math.min(500, Number(season?.maxEp || 0)));
+      for (let ep = 1; ep <= maxEp; ep++) {
+        const item = html('<button class="ep" type="button"><div class="still">E' + ep + '</div><div class="b"><b>Episode ' + ep + '</b><small>Season ' + Number(seasonNo) + '</small></div></button>');
+        item.onclick = () => playMovieBoxEpisode(String(id), Number(seasonNo), ep, title + ' · S' + seasonNo + ' E' + ep);
+        list.appendChild(item);
+      }
+    };
+    $('#mb-season', episodesBox).onchange = (event) => renderEpisodes(event.target.value);
+    renderEpisodes(seasonList[0]?.se || 1);
+  } else if (identity.isSeries) {
+    episodesBox.innerHTML = '<p class="note pad">Episode list was not included in the detail response.</p>';
+  }
+  view.appendChild(page);
+}
+
 function movieBoxUrl(value) {
   if (!value) return '';
   if (typeof value === 'string') return value;
@@ -536,6 +691,7 @@ async function searchView(q) {
 
 async function detailView(type, id) {
   clearInterval(heroTimer);
+  if (type === 'moviebox') return movieBoxDetailView(id);
   if (!['movie', 'tv'].includes(type)) return (location.hash = '#/home');
   view.innerHTML = spinner;
   const lang = store.get('lang', 'en-US').slice(0, 2);
