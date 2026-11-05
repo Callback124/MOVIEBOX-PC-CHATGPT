@@ -35,7 +35,7 @@ for (const d of fs.readdirSync(res)) {
 const cfg = JSON.parse(fs.readFileSync(path.join(__dirname, 'capacitor.config.json'), 'utf8'));
 const javaDir = path.join(root, 'java', ...cfg.appId.split('.'));
 must(fs.existsSync(javaDir), 'java package dir not found: ' + javaDir);
-for (const f of ['MainActivity.java', 'ExoPlayerPlugin.java', 'PlayerActivity.java']) {
+for (const f of ['MainActivity.java', 'ExoPlayerPlugin.java', 'MovieBoxHomeApi.java', 'PlayerActivity.java']) {
   fs.copyFileSync(path.join(__dirname, 'native', f), path.join(javaDir, f));
 }
 // player icons (vector drawables)
