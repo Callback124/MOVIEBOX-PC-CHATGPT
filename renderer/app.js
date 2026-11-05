@@ -411,8 +411,7 @@ async function playMovieBoxEpisode(subjectId, se, ep, title) {
       const data = payload?.data || payload;
       options = movieBoxStreamOptions(data);
       if (options.length) break;
-      // The server explicitly says there is no resource for this se/ep pair; try the alternate pair.
-      if (data?.hasResource === true) break;
+      // Try the alternate parameter pair whenever this response contains no usable URL.
     }
     if (!options.length) {
       const data = lastPayload?.data || lastPayload || {};
