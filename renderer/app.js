@@ -345,11 +345,11 @@ function movieBoxStreamOptions(data) {
   const found = [];
   const streamKeys = /^(streams?|hls|dash|play|playback|video|videos|source|sources|quality|qualities|file|files|media|download)$/i;
   const urlKeys = ['url', 'src', 'playUrl', 'streamUrl', 'fileUrl', 'uri', 'videoUrl', 'mediaUrl', 'downloadUrl', 'masterUrl'];
-  const kindFor = (key, url) => {
+  const kindFor = (key, url, hint = '') => {
     const ext = String(url || '').match(/\.(m3u8|mpd|mp4|m4v|webm|mov)(?:$|[?#])/i)?.[1]?.toUpperCase();
-    if (ext === 'M3U8') return 'HLS';
-    if (ext === 'MPD') return 'DASH';
-    if (ext) return 'MP4';
+    if (ext === 'M3U8' || /HLS|M3U8/i.test(String(hint))) return 'HLS';
+    if (ext === 'MPD' || /DASH|MPD/i.test(String(hint))) return 'DASH';
+    if (ext || /MP4/i.test(String(hint))) return 'MP4';
     if (/hls/i.test(key)) return 'HLS';
     if (/dash/i.test(key)) return 'DASH';
     return 'STREAM';
@@ -378,13 +378,14 @@ function movieBoxStreamOptions(data) {
     if (candidate && (streamContext || /\.(m3u8|mpd|mp4|m4v|webm|mov)(?:$|[?#])/i.test(candidate))) {
       const resolution = value.resolution || value.height || value.quality || value.definition || inherited.resolution || '';
       const label = value.name || value.label || value.qualityName || value.definitionName || inherited.label || '';
-      found.push({ url: candidate, kind: kindFor(key, candidate), resolution: String(resolution), label: String(label) });
+      found.push({ url: candidate, kind: kindFor(key, candidate, value.format || value.type || inherited.format), resolution: String(resolution), label: String(label) });
     }
     for (const [childKey, childValue] of Object.entries(value)) {
       if (urlKeys.includes(childKey) && typeof childValue === 'string') continue;
       add(childValue, childKey, streamContext, {
         resolution: value.resolution || value.height || value.quality || inherited.resolution || '',
-        label: value.name || value.label || inherited.label || ''
+        label: value.name || value.label || inherited.label || '',
+        format: value.format || value.type || inherited.format || ''
       });
     }
   };
@@ -424,6 +425,7 @@ async function playMovieBoxEpisode(subjectId, se, ep, title) {
       try {
         window.MB_play({
           src: source.url,
+          format: source.kind,
           title: title + (source.label || source.resolution ? ' · ' + (source.label || source.resolution) : ''),
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36',
