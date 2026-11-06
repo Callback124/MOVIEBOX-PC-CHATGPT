@@ -428,52 +428,36 @@ function movieBoxPlaybackReferer(detailPath) {
 }
 async function playMovieBoxEpisode(subjectId, se, ep, title, detailPath = '') {
   const status = $('.mb-play-status');
-  if (status) { status.style.display = 'block'; status.textContent = 'Refreshing session and loading video sources…'; }
   try {
-    const attempts = [{ se: Number(se), ep: Number(ep) }];
-    const alternate = Number(se) === 0 && Number(ep) === 0 ? { se: 1, ep: 1 } : { se: 0, ep: 0 };
-    attempts.push(alternate);
-    let options = [];
-    let lastPayload = null;
-    let lastAttemptError = null;
-    for (const params of attempts) {
-      try {
-        const payload = await movieBoxApiGet('play', { subjectId: String(subjectId), detailPath: String(detailPath || ''), se: params.se, ep: params.ep });
-        lastPayload = payload;
-        const data = payload?.data || payload;
-        options = movieBoxStreamOptions(data);
-        if (options.length) break;
-      } catch (attemptError) {
-        lastAttemptError = attemptError;
+    if (typeof window.MB_play !== 'function') throw new Error('Built-in ExoPlayer bridge is unavailable. Install the latest Android APK.');
+    const nativeApi = window.Capacitor?.Plugins?.MovieBoxHomeApi;
+    let token = (window.__movieBoxSessionToken || store.get('movieboxToken', '') || '').trim();
+    if (nativeApi?.getHome) {
+      const home = await nativeApi.getHome();
+      if (home?.token) {
+        token = String(home.token).trim();
+        window.__movieBoxSessionToken = token;
+        store.set('movieboxToken', token);
       }
-      // Retry with the alternate pair even when the first API request itself fails.
     }
-    if (!options.length) {
-      const data = lastPayload?.data || lastPayload || {};
-      const apiMessage = lastPayload?.message || data?.message || lastAttemptError?.message || 'No direct stream URL was returned';
-      throw new Error(apiMessage + ' (hasResource: ' + String(data?.hasResource) + '; tried se=' + attempts.map(x => x.se + ',ep=' + x.ep).join(' and ') + ')');
-    }
+    const dubs = (window.__mbDubsBySubject && window.__mbDubsBySubject[String(subjectId)]) || [];
     const headers = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36',
       Referer: movieBoxPlaybackReferer(detailPath),
       Origin: 'https://movieboxph.org',
-      Accept: '*/*'
+      Accept: '*/*',
+      'x-client-info': JSON.stringify({ timezone: 'Asia/Calcutta' }),
+      'x-request-lang': 'en'
     };
-    const start = async (source) => {
-      if (typeof window.MB_play !== 'function') throw new Error('Built-in ExoPlayer bridge is not loaded. Rebuild the latest Android APK.');
-      if (status) { status.style.display = 'block'; status.textContent = 'Opening ExoPlayer…'; }
-      await window.MB_play({
-        src: source.url, format: source.kind,
-        title: title + ' · ' + movieBoxSourceQuality(source),
-        headers,
-        sources: options.map((item) => ({ url: item.url, format: item.kind, quality: movieBoxSourceQuality(item), label: item.label || '' }))
-      });
-    };
-    // Always launch the player immediately. Available source variants are sent to
-    // the native player so the viewer can change quality without returning here.
-    await start(options[0]);
+    if (status) { status.style.display = 'block'; status.textContent = 'Opening ExoPlayer… Resources will load inside the player.'; }
+    await window.MB_play({
+      src: '', format: '', title, headers,
+      movieBox: true, subjectId: String(subjectId), season: Number(se), episode: Number(ep),
+      detailPath: String(detailPath || ''), token,
+      dubs
+    });
   } catch (error) {
-    if (status) { status.style.display = 'block'; status.textContent = 'Playback error: ' + error.message; }
+    if (status) { status.style.display = 'block'; status.textContent = 'Player launch error: ' + (error?.message || error); }
     else console.error('MovieBox playback error:', error);
   }
 }
@@ -516,6 +500,8 @@ async function movieBoxDetailView(id) {
   const dubEntries = Array.isArray(subject.dubs) ? subject.dubs.filter((d) =>
     d && Number(d.type || 0) === 0 && String(d.subjectId || '').trim()
   ) : [];
+  window.__mbDubsBySubject = window.__mbDubsBySubject || {};
+  window.__mbDubsBySubject[String(id)] = dubEntries;
   if (dubEntries.length) {
     const dubWrap = html('<section class="mb-dubs" style="margin:16px 0"><h3 class="h-sm">Audio Languages</h3><div class="chips mb-dub-chips"></div></section>');
     const chipBox = $('.mb-dub-chips', dubWrap);
