@@ -70,7 +70,7 @@ public final class MovieBoxRepository {
     c.setRequestProperty("User-Agent",UA);c.setRequestProperty("Origin","https://movieboxph.org");
     c.setRequestProperty("Referer","https://movieboxph.org/");c.setRequestProperty("Accept","*/*");
     c.setRequestProperty("Accept-Language","en-US,en;q=0.9");c.setRequestProperty("x-request-lang","en");
-    c.setRequestProperty("x-client-info","{\\"timezone\\":\\"Asia/Calcutta\\"}");
+    c.setRequestProperty("x-client-info","{\"timezone\":\"Asia/Calcutta\"}");
     c.setRequestProperty("Cache-Control","no-cache");c.setRequestProperty("Pragma","no-cache");
     c.setRequestProperty("Accept-Encoding","identity");
     if(token!=null&&!token.isEmpty()){String t=token.replaceFirst("(?i)^Bearer\\s+","");c.setRequestProperty("Authorization","Bearer "+t);c.setRequestProperty("x-user",t);}
