@@ -786,7 +786,7 @@ public class PlayerActivity extends Activity {
         tabs.setOrientation(LinearLayout.HORIZONTAL);
         tabs.setBackgroundColor(0x1AFFFFFF);
         tabs.setPadding(dp(6), dp(6), dp(6), dp(6));
-        String[] names = sheetMode == 1 ? new String[]{"Subtitles"} : (dubVariants.length() > 1 ? new String[]{"Resources", "Audio", "Dub"} : new String[]{"Resources", "Audio"});
+        String[] names = sheetMode == 1 ? new String[]{"Subtitles"} : new String[]{"Resources", "Audio"};
         int active = sheetMode == 1 ? 0 : sheetTab;
         for (int i = 0; i < names.length; i++) {
             final int idx = i;
@@ -822,7 +822,7 @@ public class PlayerActivity extends Activity {
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
         sv.addView(list, new ViewGroup.LayoutParams(MATCH, WRAP));
-        List<Opt> opts = sheetMode == 1 ? subtitleOpts() : (sheetTab == 0 ? videoOpts() : (sheetTab == 1 ? audioOpts() : dubOpts()));
+        List<Opt> opts = sheetMode == 1 ? subtitleOpts() : (sheetTab == 0 ? videoOpts() : dubOpts());
         View selected = null;
         for (int i = 0; i < opts.size(); i++) {
             View r = optRow(opts.get(i), i);
@@ -1018,7 +1018,7 @@ public class PlayerActivity extends Activity {
                 String inheritedKey = inheritedKeys.next();
                 try { meta.put(inheritedKey, inherited.opt(inheritedKey)); } catch (Exception ignored) { }
             }
-            for (String k : new String[]{"resolution","quality","label","name","definition","height","format","mimeType","mime","protocol","type"}) {
+            for (String k : new String[]{"resolutions","resolution","quality","label","name","definition","height","format","mimeType","mime","protocol","type"}) {
                 if (obj.has(k)) try { meta.put(k, obj.opt(k)); } catch (Exception ignored) { }
             }
             String url = "";
@@ -1042,13 +1042,23 @@ public class PlayerActivity extends Activity {
         if (lower.contains("m3u8") || lower.contains("hls")) format = "HLS";
         else if (lower.contains("mpd") || lower.contains("dash")) format = "DASH";
         else if (lower.contains("mp4")) format = "MP4";
-        String quality = meta.optString("resolution", meta.optString("quality", meta.optString("label", meta.optString("name", ""))));
+        String rawQuality = meta.optString("resolutions", "");
+        if (rawQuality.isEmpty()) rawQuality = meta.optString("resolution", "");
+        if (rawQuality.isEmpty()) rawQuality = meta.optString("quality", "");
+        if (rawQuality.isEmpty()) rawQuality = meta.optString("label", "");
+        if (rawQuality.isEmpty()) rawQuality = meta.optString("name", "");
+        String quality = "";
+        if (!rawQuality.isEmpty()) {
+            String firstPart = rawQuality.split(",")[0].trim();
+            String digits = firstPart.replaceAll("\\D+", "");
+            if (!digits.isEmpty()) quality = digits + "p";
+        }
         if (quality.isEmpty()) {
             int height = meta.optInt("height", 0);
             if (height > 0) quality = height + "p";
             else {
-                java.util.regex.Matcher m = java.util.regex.Pattern.compile("(2160|1440|1080|720|576|540|480|360)\\s*p?", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(meta.toString() + " " + url);
-                quality = m.find() ? m.group(1) + "p" : "Quality unknown";
+                java.util.regex.Matcher m = java.util.regex.Pattern.compile("(2160|1440|1080|720|576|540|480|360|240|144)\\s*p?", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(meta.toString() + " " + url);
+                quality = m.find() ? m.group(1) + "p" : "Auto";
             }
         }
         try { JSONObject item = new JSONObject(); item.put("url", url); item.put("format", format); item.put("quality", quality); out.put(item); } catch (Exception ignored) { }
