@@ -21,10 +21,19 @@ public final class MovieBoxRepository {
     Exception last=null;
     for(String b:BASES) try {
       HttpURLConnection c=connect(b+"home","GET",null,"");
-      String t=c.getHeaderField("x-user");
+      String xUser=c.getHeaderField("x-user");
       JSONObject j=read(c);
-      if(t==null||t.isEmpty())t=j.optString("token","");
-      if(t==null||t.trim().isEmpty())throw new IOException("Fresh MovieBox token missing from /home x-user header");
+      String t="";
+      if(xUser!=null&&!xUser.trim().isEmpty()){
+        String header=xUser.trim();
+        if(header.startsWith("{")){
+          try{t=new JSONObject(header).optString("token","");}catch(Exception ignored){}
+        }else{
+          t=header;
+        }
+      }
+      if(t.trim().isEmpty())t=j.optString("token","");
+      if(t.trim().isEmpty())throw new IOException("Fresh MovieBox token missing from /home response x-user header");
       saveToken(t);
       return j;
     } catch(Exception e){last=e;}
@@ -68,7 +77,7 @@ public final class MovieBoxRepository {
     HttpURLConnection c=(HttpURLConnection)new URL(url).openConnection();
     c.setRequestMethod(method);c.setConnectTimeout(15000);c.setReadTimeout(25000);c.setUseCaches(false);
     c.setRequestProperty("User-Agent",UA);c.setRequestProperty("Origin","https://movieboxph.org");
-    c.setRequestProperty("Referer","https://movieboxph.org/");c.setRequestProperty("Accept","*/*");
+    c.setRequestProperty("Referer","https://movieboxph.org/");c.setRequestProperty("Accept","application/json, text/plain, */*");
     c.setRequestProperty("Accept-Language","en-US,en;q=0.9");c.setRequestProperty("x-request-lang","en");
     c.setRequestProperty("x-client-info","{\"timezone\":\"Asia/Calcutta\"}");
     c.setRequestProperty("Cache-Control","no-cache");c.setRequestProperty("Pragma","no-cache");
