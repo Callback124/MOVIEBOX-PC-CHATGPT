@@ -381,8 +381,8 @@ function movieBoxStreamOptions(data) {
       return;
     }
     if (typeof value !== 'object') return;
-    const resolution = qualityValue(value.resolution, value.height, value.quality, value.definition,
-      value.qualityName, value.definitionName, value.videoQuality, inherited.resolution, inherited.label);
+    const resolution = qualityValue(value.resolutions, value.resolution, value.height, value.quality, value.definition,
+      value.qualityName, value.definitionName, value.videoQuality, inherited.resolutions, inherited.resolution, inherited.label);
     const labelRaw = value.name || value.label || value.qualityName || value.definitionName || inherited.label || '';
     const formatHint = value.format || value.type || value.mimeType || value.mime || value.protocol || value.streamType || inherited.format || '';
     let candidate = '';
@@ -395,7 +395,7 @@ function movieBoxStreamOptions(data) {
     for (const [childKey, childValue] of Object.entries(value)) {
       if (urlKeys.includes(childKey) && typeof childValue === 'string') continue;
       add(childValue, childKey, streamContext, {
-        resolution: resolution || inherited.resolution || '',
+        resolution: resolution || qualityValue(value.resolutions, inherited.resolutions, inherited.resolution) || inherited.resolution || '',
         label: String(labelRaw || inherited.label || ''),
         format: formatHint
       });
