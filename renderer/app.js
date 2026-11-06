@@ -517,7 +517,7 @@ async function movieBoxDetailView(id) {
         const episodeLabel = firstEpisode ? ' · S' + seasonNo + ' E' + episodeNo : '';
         playMovieBoxEpisode(
           String(dub.subjectId), seasonNo, episodeNo,
-          title + ' · ' + label + episodeLabel,
+          String(dub.title || dub.name || title) + episodeLabel,
           String(dub.detailPath || ''), dubEntries
         );
       };
@@ -545,7 +545,11 @@ async function movieBoxDetailView(id) {
     episodesBox.innerHTML = '<div class="section-head"><h3>Episodes</h3><select class="sel" id="mb-season">' +
       seasonList.map((s) => '<option value="' + Number(s.se) + '">Season ' + Number(s.se) + ' · ' + Number(s.maxEp || 0) + ' Episodes</option>').join('') +
       '</select></div><div class="eps" id="mb-episode-list"></div>';
-    window.__mbEpisodeSequence = seasonList.flatMap((season) => Array.from({length: Math.max(0, Math.min(500, Number(season.maxEp || 0)))}, (_, i) => ({se:Number(season.se),ep:i+1})));
+    window.__mbEpisodeSequence = seasonList.flatMap((season) => {
+      const seasonNo = Number(season.se || season.season || 0);
+      const maxEp = Math.max(0, Math.min(500, Number(season.maxEp || season.maxEpisode || season.episodeCount || 0)));
+      return seasonNo > 0 ? Array.from({length: maxEp}, (_, i) => ({se:seasonNo,ep:i+1})) : [];
+    });
     const renderEpisodes = (seasonNo) => {
       const season = seasonList.find((s) => Number(s.se) === Number(seasonNo));
       const list = $('#mb-episode-list', episodesBox); list.innerHTML = '';
