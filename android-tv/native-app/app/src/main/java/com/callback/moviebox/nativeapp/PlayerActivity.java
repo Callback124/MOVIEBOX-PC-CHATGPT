@@ -437,7 +437,6 @@ public class PlayerActivity extends Activity {
         timeView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
         timeView.setText("00:00 · 00:00");
         timeView.setShadowLayer(3f, 0f, 1f, Color.BLACK);
-        row.addView(timeView, new LinearLayout.LayoutParams(0, WRAP, 1f));
         timeView.setGravity(Gravity.CENTER_VERTICAL);
         row.addView(timeView, new LinearLayout.LayoutParams(dp(112), dp(48)));
         volBtn = addTextControl(row, "VOL", v -> toggleMute());
