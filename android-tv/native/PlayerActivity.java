@@ -50,6 +50,7 @@ import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 
 import org.json.JSONObject;
+import org.json.JSONArray;
 
 import java.util.HashMap;
 import java.util.Iterator;
@@ -92,6 +93,8 @@ public class PlayerActivity extends Activity {
     private SeekView seek;
     private FrameLayout sheetLayer;
     private LinearLayout sheet;
+    private JSONArray sourceVariants = new JSONArray();
+    private String activeSourceUrl = "";
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private boolean locked = false;
@@ -240,6 +243,8 @@ public class PlayerActivity extends Activity {
         });
 
         String url = getIntent().getStringExtra("url");
+        activeSourceUrl = url == null ? "" : url;
+        try { sourceVariants = new JSONArray(getIntent().getStringExtra("sources") == null ? "[]" : getIntent().getStringExtra("sources")); } catch (Exception ignored) { sourceVariants = new JSONArray(); }
         String title = getIntent().getStringExtra("title");
         String format = getIntent().getStringExtra("format");
         long pos = getIntent().getLongExtra("pos", 0L);
@@ -896,8 +901,38 @@ public class PlayerActivity extends Activity {
             boolean on = refs.size() == 1 || (videoForced && r.group.isTrackSelected(r.index));
             out.add(new Opt(videoLabel(r.format), on, () -> selectTrack(r)));
         }
-        if (refs.isEmpty()) out.add(new Opt("No video tracks", false, () -> { }));
+        if (refs.isEmpty()) out.add(new Opt("No adaptive video tracks", false, () -> { }));
+        for (int i = 0; i < sourceVariants.length(); i++) {
+            final JSONObject source = sourceVariants.optJSONObject(i);
+            if (source == null) continue;
+            final String sourceUrl = source.optString("url", "");
+            if (sourceUrl.isEmpty()) continue;
+            final String format = source.optString("format", "");
+            final String quality = source.optString("quality", "Quality unknown");
+            final String label = quality + " • " + format.toUpperCase(Locale.ROOT);
+            out.add(new Opt("Source: " + label, sourceUrl.equals(activeSourceUrl), () -> switchSource(source)));
+        }
         return out;
+    }
+
+    private void switchSource(JSONObject source) {
+        if (player == null || source == null) return;
+        String url = source.optString("url", "");
+        String format = source.optString("format", "");
+        if (url.isEmpty()) return;
+        long position = Math.max(0, player.getCurrentPosition());
+        boolean wasPlaying = player.getPlayWhenReady();
+        MediaItem.Builder builder = new MediaItem.Builder().setUri(Uri.parse(url));
+        String f = format.toUpperCase(Locale.ROOT);
+        if (f.contains("HLS") || f.contains("M3U8")) builder.setMimeType("application/x-mpegURL");
+        else if (f.contains("DASH") || f.contains("MPD")) builder.setMimeType("application/dash+xml");
+        else if (f.contains("MP4")) builder.setMimeType("video/mp4");
+        activeSourceUrl = url;
+        player.setMediaItem(builder.build());
+        player.prepare();
+        if (position > 0) player.seekTo(position);
+        player.setPlayWhenReady(wasPlaying);
+        toast("Source changed: " + source.optString("quality", format));
     }
 
     private List<Opt> audioOpts() {
