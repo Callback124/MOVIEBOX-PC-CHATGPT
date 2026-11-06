@@ -90,9 +90,9 @@ public class PlayerActivity extends Activity {
     private LinearLayout topBar;
     private LinearLayout centerRow;
     private LinearLayout bottomBar;
-    private ImageView backBtn;
-    private ImageView lockBtn;
-    private ImageView playBtn;
+    private TextView backBtn;
+    private TextView lockBtn;
+    private TextView playBtn;
     private TextView volBtn;
     private TextView titleView;
     private TextView timeView;
@@ -104,8 +104,8 @@ public class PlayerActivity extends Activity {
     private JSONArray dubVariants = new JSONArray();
     private JSONArray episodeSequence = new JSONArray();
     private TextView episodeSubtitleView;
-    private ImageView previousEpisodeBtn;
-    private ImageView nextEpisodeBtn;
+    private TextView previousEpisodeBtn;
+    private TextView nextEpisodeBtn;
     private String basePlayerTitle = "";
     private String originalPlayerTitle = "";
     private String movieBoxSubjectId = "";
@@ -327,7 +327,7 @@ public class PlayerActivity extends Activity {
     private void updatePlayIcon() {
         if (player == null || playBtn == null) return;
         boolean playing = player.getPlayWhenReady() && player.getPlaybackState() != Player.STATE_ENDED;
-        playBtn.setImageResource(drawableId(playing ? "ic_pause" : "ic_play"));
+        playBtn.setText(playing ? "Ⅱ" : "▶");
     }
 
     private void updateProgress() {
@@ -438,14 +438,13 @@ public class PlayerActivity extends Activity {
         timeView.setText("00:00 · 00:00");
         timeView.setShadowLayer(3f, 0f, 1f, Color.BLACK);
         timeView.setGravity(Gravity.CENTER_VERTICAL);
-        row.addView(timeView, new LinearLayout.LayoutParams(dp(112), dp(48)));
-        volBtn = addTextControl(row, "VOL", v -> toggleMute());
-        addTextControl(row, "AUDIO", v -> openSheet(0, 1));
-        addTextControl(row, "QUALITY", v -> openSheet(0, 0));
-        addTextControl(row, "SUB", v -> openSheet(1, 0));
-        addTextControl(row, "FIT", v -> cycleFit());
-        addTextControl(row, "SPEED", v -> cycleSpeed());
-        addTextControl(row, "PIP", v -> enterPip());
+        LinearLayout.LayoutParams timeLp = new LinearLayout.LayoutParams(0, dp(48), 1f);
+        row.addView(timeView, timeLp);
+        volBtn = addIconControl(row, "◖))", "Volume", v -> toggleMute());
+        addIconControl(row, "♫", "Audio", v -> openSheet(0, 1));
+        addIconControl(row, "▣", "Quality / Server", v -> openSheet(0, 0));
+        addIconControl(row, "CC", "Subtitles", v -> openSheet(1, 0));
+        addIconControl(row, "⛶", "Fullscreen", v -> cycleFit());
         bottomBar.addView(row, new LinearLayout.LayoutParams(MATCH, dp(52)));
         ui.addView(bottomBar, new FrameLayout.LayoutParams(MATCH, WRAP, Gravity.BOTTOM));
 
@@ -501,18 +500,27 @@ public class PlayerActivity extends Activity {
         v.setBackground(stateBg(Color.TRANSPARENT));
     }
 
-    private ImageView iconButton(String icon, int padDp) {
-        ImageView v = new ImageView(this);
-        v.setImageResource(drawableId(icon));
-        v.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        int p = dp(padDp);
-        v.setPadding(p, p, p, p);
+    private TextView iconButton(String icon, int padDp) {
+        TextView v = new TextView(this);
+        String glyph = "•";
+        if (icon.contains("chevron")) glyph = "⌄";
+        else if (icon.contains("lock")) glyph = "▣";
+        else if (icon.contains("play")) glyph = "▶";
+        else if (icon.contains("pause")) glyph = "Ⅱ";
+        else if (icon.contains("previous")) glyph = "|◀";
+        else if (icon.contains("next")) glyph = "▶|";
+        v.setText(glyph);
+        v.setTextColor(Color.WHITE);
+        v.setTextSize(TypedValue.COMPLEX_UNIT_SP, icon.contains("play") ? 28 : 24);
+        v.setTypeface(Typeface.DEFAULT_BOLD);
+        v.setGravity(Gravity.CENTER);
+        v.setPadding(dp(padDp), dp(padDp), dp(padDp), dp(padDp));
         makeFocusable(v);
         return v;
     }
 
-    private ImageView addButton(LinearLayout row, String icon, View.OnClickListener l) {
-        ImageView v = iconButton(icon, 9);
+    private TextView addButton(LinearLayout row, String icon, View.OnClickListener l) {
+        TextView v = iconButton(icon, 9);
         v.setOnClickListener(l);
         row.addView(v, new LinearLayout.LayoutParams(dp(46), dp(46)));
         return v;
@@ -536,20 +544,37 @@ public class PlayerActivity extends Activity {
         return v;
     }
 
+    private TextView addIconControl(LinearLayout row, String glyph, String description, View.OnClickListener listener) {
+        TextView v = new TextView(this);
+        v.setText(glyph);
+        v.setContentDescription(description);
+        v.setTextColor(Color.WHITE);
+        v.setTextSize(TypedValue.COMPLEX_UNIT_SP, glyph.equals("CC") ? 18 : 25);
+        v.setTypeface(Typeface.DEFAULT_BOLD);
+        v.setGravity(Gravity.CENTER);
+        makeFocusable(v);
+        v.setOnClickListener(listener);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(58), dp(48));
+        lp.leftMargin = dp(3);
+        row.addView(v, lp);
+        return v;
+    }
+
     private FrameLayout skipCell(String icon, final long deltaMs) {
         FrameLayout f = new FrameLayout(this);
-        ImageView iv = new ImageView(this);
-        iv.setImageResource(drawableId(icon));
-        iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        iv.setPadding(dp(6), dp(6), dp(6), dp(6));
-        f.addView(iv, new FrameLayout.LayoutParams(MATCH, MATCH));
+        TextView glyph = new TextView(this);
+        glyph.setText(icon.contains("replay") ? "↶" : "↷");
+        glyph.setTextColor(Color.WHITE);
+        glyph.setTextSize(TypedValue.COMPLEX_UNIT_SP, 42);
+        glyph.setGravity(Gravity.CENTER);
+        f.addView(glyph, new FrameLayout.LayoutParams(MATCH, MATCH));
         TextView t = new TextView(this);
         t.setText("10");
         t.setTextColor(Color.WHITE);
         t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
         t.setTypeface(Typeface.DEFAULT_BOLD);
         t.setGravity(Gravity.CENTER);
-        t.setPadding(0, dp(4), 0, 0);
+        t.setPadding(0, dp(5), 0, 0);
         f.addView(t, new FrameLayout.LayoutParams(MATCH, MATCH));
         makeFocusable(f);
         f.setOnClickListener(v -> seekBy(deltaMs));
@@ -597,7 +622,7 @@ public class PlayerActivity extends Activity {
 
     private void setLocked(boolean on) {
         locked = on;
-        lockBtn.setImageResource(drawableId(on ? "ic_lock" : "ic_lock_open"));
+        lockBtn.setText(on ? "▣" : "▢");
         toast(on ? "Controls locked" : "Controls unlocked");
         controlsVisible = true;
         applyVisibility();
@@ -608,7 +633,7 @@ public class PlayerActivity extends Activity {
     private void toggleMute() {
         muted = !muted;
         if (player != null) player.setVolume(muted ? 0f : 1f);
-        volBtn.setText(muted ? "MUTED" : "VOL");
+        volBtn.setText(muted ? "×" : "◖))");
     }
 
     private void cycleSpeed() {
@@ -992,71 +1017,54 @@ public class PlayerActivity extends Activity {
         if (resourcesLoading) return;
         resourcesLoading = true;
         final long resumeAt = preservePosition && player != null ? Math.max(0, player.getCurrentPosition()) : 0L;
+        titleView.setText(formatEpisodeTitle(basePlayerTitle) + "  •  Fetching resources…");
         new Thread(() -> {
-            Exception last = null;
-            String[] bases = new String[]{"https://movieboxph.org/wefeed-h5api-bff/", "https://h5-api.aoneroom.com/wefeed-h5api-bff/"};
-            for (String base : bases) {
-                HttpURLConnection connection = null;
-                try {
-                    String query = "subject/play?subjectId=" + URLEncoder.encode(subjectId, "UTF-8")
-                            + "&se=" + Math.max(0, season) + "&ep=" + Math.max(0, episode);
-                    if (detailPath != null && !detailPath.isEmpty()) query += "&detailPath=" + URLEncoder.encode(detailPath, "UTF-8");
-                    connection = (HttpURLConnection) new URL(base + query).openConnection();
-                    connection.setRequestMethod("GET");
-                    connection.setConnectTimeout(15000);
-                    connection.setReadTimeout(25000);
-                    connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36");
-                    connection.setRequestProperty("Accept", "*/*");
-                    connection.setRequestProperty("Origin", "https://movieboxph.org");
-                    String path = detailPath == null ? "" : detailPath.trim();
-                    String referer = path.isEmpty() ? "https://movieboxph.org/" : (path.startsWith("http") ? path : "https://movieboxph.org/play/" + (path.startsWith("/") ? path.substring(1) : path));
-                    connection.setRequestProperty("Referer", referer);
-                    connection.setRequestProperty("x-client-info", "{\"timezone\":\"Asia/Calcutta\"}");
-                    connection.setRequestProperty("x-request-lang", "en");
-                    if (movieBoxToken != null && !movieBoxToken.isEmpty()) {
-                        String clean = movieBoxToken.replaceFirst("(?i)^Bearer\\s+", "");
-                        connection.setRequestProperty("Authorization", "Bearer " + clean);
-                        connection.setRequestProperty("x-user", clean);
-                    }
-                    InputStream input = connection.getResponseCode() >= 400 ? connection.getErrorStream() : connection.getInputStream();
-                    BufferedReader reader = new BufferedReader(new InputStreamReader(input, "UTF-8"));
-                    StringBuilder body = new StringBuilder(); String line;
-                    while ((line = reader.readLine()) != null) body.append(line);
-                    reader.close();
-                    JSONObject payload = new JSONObject(body.toString());
-                    JSONObject data = payload.optJSONObject("data");
-                    if (data == null) data = payload;
-                    JSONArray found = new JSONArray();
-                    collectMovieBoxSources(data, "data", false, new JSONObject(), found);
-                    if (found.length() == 0) throw new Exception(payload.optString("message", "No playable resources returned"));
-                    List<JSONObject> sortedSources = new ArrayList<>();
-                    for (int i = 0; i < found.length(); i++) {
-                        JSONObject item = found.optJSONObject(i);
-                        if (item != null) sortedSources.add(item);
-                    }
-                    Collections.sort(sortedSources, (a, b) -> Integer.compare(
-                            qualityNumber(b.optString("quality", "")), qualityNumber(a.optString("quality", ""))));
-                    JSONArray ordered = new JSONArray();
-                    for (JSONObject item : sortedSources) ordered.put(item);
-                    final JSONArray orderedSources = ordered;
-                    JSONObject first = orderedSources.getJSONObject(0);
-                    runOnUiThread(() -> {
-                        sourceVariants = orderedSources;
-                        activeSourceUrl = first.optString("url", "");
-                        titleView.setText(formatEpisodeTitle(basePlayerTitle));
-                        playSource(first, resumeAt);
-                        if (sheetOpen) renderSheet(false);
-                    });
-                    last = null;
-                    break;
-                } catch (Exception e) { last = e; }
-                finally { if (connection != null) connection.disconnect(); }
-            }
-            final Exception error = last;
+            Exception error = null;
+            JSONArray orderedSources = new JSONArray();
+            try {
+                // MovieBoxRepository performs a fresh /home handshake, obtains x-user,
+                // then calls the authenticated subject/play endpoint with the current session.
+                MovieBoxRepository repository = new MovieBoxRepository(this);
+                JSONObject payload = repository.play(subjectId, detailPath, season, episode);
+                movieBoxToken = repository.token();
+                JSONObject data = payload.optJSONObject("data");
+                if (data == null) data = payload;
+                JSONArray found = new JSONArray();
+                collectMovieBoxSources(data, "data", false, new JSONObject(), found);
+                List<JSONObject> sortedSources = new ArrayList<>();
+                for (int i = 0; i < found.length(); i++) {
+                    JSONObject item = found.optJSONObject(i);
+                    if (item != null && !item.optString("url", "").isEmpty()) sortedSources.add(item);
+                }
+                Collections.sort(sortedSources, (a, b) -> Integer.compare(
+                        qualityNumber(b.optString("quality", "")), qualityNumber(a.optString("quality", ""))));
+                for (JSONObject item : sortedSources) orderedSources.put(item);
+                if (orderedSources.length() == 0) {
+                    String message = payload.optString("message", payload.optString("reason", "No playable stream URLs were returned"));
+                    throw new Exception(message);
+                }
+            } catch (Exception e) { error = e; }
+            final Exception finalError = error;
+            final JSONArray finalSources = orderedSources;
             runOnUiThread(() -> {
                 resourcesLoading = false;
-                if (error != null) toast("Resource loading failed: " + error.getMessage());
-                else if (sheetOpen) renderSheet(false);
+                if (finalError != null) {
+                    titleView.setText(formatEpisodeTitle(basePlayerTitle) + "  •  Resources unavailable");
+                    toast("Resource loading failed: " + finalError.getMessage());
+                    if (sheetOpen) renderSheet(false);
+                    return;
+                }
+                sourceVariants = finalSources;
+                JSONObject first = sourceVariants.optJSONObject(0);
+                if (first == null) {
+                    toast("No playable source found");
+                    return;
+                }
+                activeSourceUrl = first.optString("url", "");
+                titleView.setText(formatEpisodeTitle(basePlayerTitle));
+                playSource(first, resumeAt);
+                if (sheetOpen) renderSheet(false);
+                showControls();
             });
         }).start();
     }
