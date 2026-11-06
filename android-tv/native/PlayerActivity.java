@@ -1011,10 +1011,10 @@ public class PlayerActivity extends Activity {
                             qualityNumber(b.optString("quality", "")), qualityNumber(a.optString("quality", ""))));
                     JSONArray ordered = new JSONArray();
                     for (JSONObject item : sortedSources) ordered.put(item);
-                    found = ordered;
-                    JSONObject first = found.getJSONObject(0);
+                    final JSONArray orderedSources = ordered;
+                    JSONObject first = orderedSources.getJSONObject(0);
                     runOnUiThread(() -> {
-                        sourceVariants = found;
+                        sourceVariants = orderedSources;
                         activeSourceUrl = first.optString("url", "");
                         titleView.setText(basePlayerTitle);
                         playSource(first, resumeAt);
