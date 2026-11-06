@@ -35,6 +35,8 @@ public class ExoPlayerPlugin extends Plugin {
         intent.putExtra("token", call.getString("token", ""));
         JSArray dubs = call.getArray("dubs");
         if (dubs != null) intent.putExtra("dubs", dubs.toString());
+        JSArray episodeSequence = call.getArray("episodeSequence");
+        if (episodeSequence != null) intent.putExtra("episodeSequence", episodeSequence.toString());
         Double pos = call.getDouble("position", 0.0);
         intent.putExtra("pos", (long) ((pos == null ? 0.0 : pos) * 1000));
         getActivity().runOnUiThread(() -> {
