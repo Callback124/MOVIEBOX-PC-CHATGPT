@@ -1000,6 +1000,16 @@ public class PlayerActivity extends Activity {
                     JSONArray found = new JSONArray();
                     collectMovieBoxSources(data, "data", false, new JSONObject(), found);
                     if (found.length() == 0) throw new Exception(payload.optString("message", "No playable resources returned"));
+                    List<JSONObject> sortedSources = new ArrayList<>();
+                    for (int i = 0; i < found.length(); i++) {
+                        JSONObject item = found.optJSONObject(i);
+                        if (item != null) sortedSources.add(item);
+                    }
+                    Collections.sort(sortedSources, (a, b) -> Integer.compare(
+                            qualityNumber(b.optString("quality", "")), qualityNumber(a.optString("quality", ""))));
+                    JSONArray ordered = new JSONArray();
+                    for (JSONObject item : sortedSources) ordered.put(item);
+                    found = ordered;
                     JSONObject first = found.getJSONObject(0);
                     runOnUiThread(() -> {
                         sourceVariants = found;
@@ -1051,6 +1061,11 @@ public class PlayerActivity extends Activity {
             String url = (String) value;
             if (url.startsWith("http") && (context || url.matches("(?i).*\\.(m3u8|mpd|mp4|m4v|webm)(\\?.*)?$"))) addMovieBoxSource(url, key, inherited, out);
         }
+    }
+
+    private static int qualityNumber(String quality) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d{3,4})").matcher(quality == null ? "" : quality);
+        return m.find() ? Integer.parseInt(m.group(1)) : 0;
     }
 
     private void addMovieBoxSource(String url, String key, JSONObject meta, JSONArray out) {
