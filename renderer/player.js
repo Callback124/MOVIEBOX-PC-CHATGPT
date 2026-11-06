@@ -89,6 +89,11 @@
     if (pushed) { pushed = false; if (!fromPop) history.back(); }
   }
   window.addEventListener('popstate', () => { if (pushed && ov) closePlayer(true); });
+  window.MB_closePlayerForBack = function () {
+    if (!ov) return false;
+    closePlayer();
+    return true;
+  };
 
   function openHtml5(o) {
     closePlayer(true);
