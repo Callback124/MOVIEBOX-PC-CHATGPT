@@ -408,3 +408,9 @@ button:focus-visible,a:focus-visible,.card:focus-visible,.ep:focus-within{outlin
 .server-copy small{font-size:12px;color:#aaa}
 .server-check{font-weight:800;color:#e50914}
 @media(max-width:700px){.topbar{padding:0 4%;gap:12px}.header-search{max-width:none}.topbar.search-mode{height:64px}}
+
+/* Keep the four header actions grouped at the far right on every screen. */
+.topbar .brand{flex:0 0 auto}
+.topbar .actions{display:flex;flex:0 0 auto;align-items:center;gap:12px;margin-left:auto}
+.topbar .icon-btn{flex:0 0 40px}
+.topbar .header-search{min-width:0}
