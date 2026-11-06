@@ -25,7 +25,7 @@ public class MainActivity extends Activity {
  private ImageView heroImage;
  private FrameLayout heroFrame;
  private String detailPath="";
- private ArrayList<View> previousPageViews=null; private int previousScrollY=0; private boolean previousTopVisible=true;
+ private ArrayList<View> previousPageViews=null; private int previousScrollY=0; private boolean previousTopVisible=true; private ArrayList<View> homePageViews=null; private String activeSearchKeyword=""; private int nextSearchPage=1; private boolean searchLoading=false,searchHasMore=false; private LinearLayout searchGrid=null,searchCurrentRow=null; private int searchRowItems=0;
  private int dp(float v){return (int)(v*getResources().getDisplayMetrics().density+.5f);}
  @Override public void onCreate(Bundle b){super.onCreate(b);getWindow().setFlags(1024,1024);getWindow().getDecorView().setSystemUiVisibility(5894|1024|512);api=new MovieBoxRepository(this);buildShell();loadHome();}
  private GradientDrawable bg(int color,int stroke){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(3));if(stroke!=0)d.setStroke(dp(2),stroke);return d;}
@@ -78,6 +78,7 @@ public class MainActivity extends Activity {
  private Handler searchHandler=new Handler(Looper.getMainLooper()); private Runnable suggestionTask; private int suggestionRequest=0;
  private JSONArray searchArray(JSONObject response){JSONObject d=response==null?null:response.optJSONObject("data");if(d==null)return new JSONArray();JSONArray a=d.optJSONArray("items");if(a==null)a=d.optJSONArray("list");if(a==null)a=d.optJSONArray("subjects");return a==null?new JSONArray():a;}
  private void showSearch(){
+  if(homePageViews==null){homePageViews=new ArrayList<>();for(int i=0;i<content.getChildCount();i++)homePageViews.add(content.getChildAt(i));}
   top.setVisibility(View.GONE);content.removeAllViews();
   TextView h=txt("Search Movies & Series",28,WHITE,true);h.setPadding(dp(50),dp(35),0,dp(20));content.addView(h);
   EditText input=new EditText(this);input.setSingleLine(true);input.setTextColor(WHITE);input.setHintTextColor(MUTED);input.setHint("Search MovieBox…");input.setTextSize(18);input.setPadding(dp(18),0,dp(18),0);input.setBackground(bg(PANEL,0xff555555));LinearLayout.LayoutParams ip=new LinearLayout.LayoutParams(dp(720),dp(58));ip.leftMargin=dp(50);content.addView(input,ip);
@@ -94,16 +95,41 @@ public class MainActivity extends Activity {
  }
  private void search(String q){search(q,1);}
  private void search(String q,int page){
-  if(q==null||q.trim().isEmpty())return;final String keyword=q.trim();
-  if(page==1){content.removeAllViews();TextView h=txt("Results for: "+keyword,24,WHITE,true);h.setPadding(dp(48),dp(28),0,dp(10));content.addView(h);TextView loading=txt("Searching MovieBox…",16,MUTED,false);loading.setPadding(dp(48),dp(20),0,0);content.addView(loading);}
-  new Thread(()->{try{JSONObject response=api.search(keyword,page);JSONArray items=searchArray(response);JSONObject data=response.optJSONObject("data");JSONObject pager=data==null?null:data.optJSONObject("pager");boolean hasMore=pager!=null?pager.optBoolean("hasMore",page<pager.optInt("totalPages",page)):items.length()>=24;runOnUiThread(()->{
-   if(page==1){content.removeAllViews();TextView h=txt("Results for: "+keyword,24,WHITE,true);h.setPadding(dp(48),dp(28),0,dp(10));content.addView(h);}
-   if(items.length()==0&&page==1){TextView empty=txt("No results found for “"+keyword+"”.",17,MUTED,false);empty.setPadding(dp(48),dp(30),0,0);content.addView(empty);return;}
-   addSection(page==1?"Search results":"More results",items);
-   if(hasMore){TextView more=button("LOAD MORE",false,()->search(keyword,page+1));more.setTextSize(14);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(dp(190),dp(48));p.leftMargin=dp(48);p.topMargin=dp(14);p.bottomMargin=dp(30);content.addView(more,p);}
-  });}catch(Exception e){runOnUiThread(()->{if(page==1)content.removeAllViews();TextView error=txt("Search failed: "+e.getMessage(),16,WHITE,false);error.setPadding(dp(48),dp(28),dp(48),dp(12));content.addView(error);focusText("RETRY SEARCH",()->search(keyword,page));});}}).start();
+  if(q==null||q.trim().isEmpty())return;
+  final String keyword=q.trim();
+  if(page==1){
+   activeSearchKeyword=keyword;nextSearchPage=1;searchLoading=true;searchHasMore=false;searchGrid=null;searchCurrentRow=null;searchRowItems=0;
+   content.removeAllViews();TextView loading=txt("Searching MovieBox…",16,MUTED,false);loading.setPadding(dp(48),dp(28),0,dp(12));content.addView(loading);
+  }else{if(searchLoading||!searchHasMore)return;searchLoading=true;}
+  final int requestedPage=page;
+  new Thread(()->{try{
+   JSONObject response=api.search(keyword,requestedPage);JSONArray items=searchArray(response);
+   JSONObject data=response.optJSONObject("data");JSONObject pager=data==null?null:data.optJSONObject("pager");
+   boolean more=pager!=null?pager.optBoolean("hasMore",requestedPage<pager.optInt("totalPages",requestedPage)):items.length()>=24;
+   runOnUiThread(()->{
+    if(!keyword.equals(activeSearchKeyword))return;
+    if(requestedPage==1){content.removeAllViews();searchGrid=new LinearLayout(this);searchGrid.setOrientation(1);searchGrid.setPadding(0,dp(8),0,dp(20));content.addView(searchGrid,new LinearLayout.LayoutParams(-1,-2));}
+    if(items.length()==0&&requestedPage==1){TextView empty=txt("No results found for “"+keyword+"”.",17,MUTED,false);empty.setPadding(dp(48),dp(30),0,0);content.addView(empty);searchHasMore=false;searchLoading=false;return;}
+    appendSearchItems(items);searchHasMore=more;nextSearchPage=requestedPage+1;searchLoading=false;
+    pageScroll.setOnScrollChangeListener((View v,int sx,int sy,int osx,int osy)->{
+     if(activeSearchKeyword.isEmpty()||!searchHasMore||searchLoading)return;
+     View child=pageScroll.getChildAt(0);if(child!=null&&child.getBottom()-sy-pageScroll.getHeight()<dp(650))search(activeSearchKeyword,nextSearchPage);
+    });
+   });
+  }catch(Exception e){runOnUiThread(()->{searchLoading=false;if(requestedPage==1)content.removeAllViews();TextView error=txt("Search failed: "+e.getMessage(),16,WHITE,false);error.setPadding(dp(48),dp(28),dp(48),dp(12));content.addView(error);focusText("RETRY SEARCH",()->search(keyword,requestedPage));});}}).start();
  }
-
+ private void appendSearchItems(JSONArray items){
+  if(searchGrid==null){searchGrid=new LinearLayout(this);searchGrid.setOrientation(1);content.addView(searchGrid,new LinearLayout.LayoutParams(-1,-2));}
+  int cols=10;int gap=dp(8);int horizontal=dp(48);int cardW=Math.max(dp(52),(getResources().getDisplayMetrics().widthPixels-horizontal-gap*(cols-1))/cols);
+  for(int i=0;i<items.length();i++){
+   JSONObject item=items.optJSONObject(i);if(item==null)continue;
+   if(searchCurrentRow==null||searchRowItems>=cols){
+    searchCurrentRow=new LinearLayout(this);searchCurrentRow.setOrientation(0);searchCurrentRow.setGravity(Gravity.TOP);searchCurrentRow.setPadding(dp(24),dp(8),dp(24),dp(8));
+    searchGrid.addView(searchCurrentRow,new LinearLayout.LayoutParams(-1,-2));searchRowItems=0;
+   }
+   addCard(searchCurrentRow,item,cardW,gap);searchRowItems++;
+  }
+ }
  private int contentType(JSONObject raw){
   JSONObject o=merged(raw);int type=o.optInt("subjectType",o.optInt("subject_type",o.optInt("type",-1)));
   String id=id(raw),corner=o.optString("corner","").toUpperCase(),genre=o.optString("genre","").toUpperCase();
@@ -195,6 +221,6 @@ public class MainActivity extends Activity {
  private void launchPlayer(String id,String name,String path,int season,int episode){Intent i=new Intent(this,PlayerActivity.class);i.putExtra("movieBox",true);i.putExtra("subjectId",id);i.putExtra("detailPath",path);i.putExtra("token",api.token());i.putExtra("season",season);i.putExtra("episode",episode);i.putExtra("title",name);startActivity(i);}
  private void showSaved(String key){top.setVisibility(View.GONE);content.removeAllViews();TextView h=txt(key.equals("mylist")?"My List":"Watch History",26,WHITE,true);h.setPadding(dp(48),dp(30),0,0);content.addView(h);content.addView(txt("Your saved titles will appear here.",16,MUTED,false));}
  private void showSettings(){new AlertDialog.Builder(this).setTitle("Playback server").setMessage("MovieBox playback is connected to the same MovieBox service used by the web app.").setPositiveButton("OK",null).show();}
- @Override public void onBackPressed(){if(slideTask!=null)handler.removeCallbacks(slideTask);if(previousPageViews!=null){content.removeAllViews();for(View v:previousPageViews){if(v.getParent() instanceof android.view.ViewGroup)((android.view.ViewGroup)v.getParent()).removeView(v);content.addView(v);}previousPageViews=null;top.setVisibility(previousTopVisible?View.VISIBLE:View.GONE);pageScroll.post(()->pageScroll.scrollTo(0,previousScrollY));return;}loadHome();}
+ @Override public void onBackPressed(){if(slideTask!=null)handler.removeCallbacks(slideTask);if(previousPageViews!=null){content.removeAllViews();for(View v:previousPageViews){if(v.getParent() instanceof android.view.ViewGroup)((android.view.ViewGroup)v.getParent()).removeView(v);content.addView(v);}previousPageViews=null;top.setVisibility(previousTopVisible?View.VISIBLE:View.GONE);pageScroll.post(()->pageScroll.scrollTo(0,previousScrollY));return;}if(homePageViews!=null){content.removeAllViews();for(View v:homePageViews){if(v.getParent() instanceof android.view.ViewGroup)((android.view.ViewGroup)v.getParent()).removeView(v);content.addView(v);}homePageViews=null;activeSearchKeyword="";searchHasMore=false;searchLoading=false;pageScroll.setOnScrollChangeListener(null);top.setVisibility(View.VISIBLE);pageScroll.post(()->pageScroll.scrollTo(0,0));return;}loadHome();}
  @Override protected void onDestroy(){super.onDestroy();if(slideTask!=null)handler.removeCallbacks(slideTask);}
 }
