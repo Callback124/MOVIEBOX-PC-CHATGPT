@@ -1,0 +1,67 @@
+package com.callback.moviebox.nativeapp;
+
+import android.content.Context;
+import android.content.SharedPreferences;
+import org.json.*;
+import java.io.*;
+import java.net.*;
+import java.nio.charset.StandardCharsets;
+
+public final class MovieBoxRepository {
+  private static final String[] BASES={"https://h5-api.aoneroom.com/wefeed-h5api-bff/","https://movieboxph.org/wefeed-h5api-bff/"};
+  private static final String UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36";
+  private final SharedPreferences prefs;
+  public MovieBoxRepository(Context c){prefs=c.getSharedPreferences("moviebox_native",Context.MODE_PRIVATE);}
+  public String token(){return prefs.getString("token","");}
+  private void saveToken(String t){if(t!=null&&!t.trim().isEmpty())prefs.edit().putString("token",t.trim().replaceFirst("(?i)^Bearer\\s+","")).apply();}
+  public JSONObject home() throws Exception {
+    Exception last=null;
+    for(String b:BASES) try {
+      HttpURLConnection c=connect(b+"home","GET",null,"");
+      String t=c.getHeaderField("x-user"); JSONObject j=read(c);
+      if(t==null||t.isEmpty()) t=j.optString("token","");
+      saveToken(t); return j;
+    } catch(Exception e){last=e;}
+    throw last==null?new IOException("MovieBox Home unavailable"):last;
+  }
+  public JSONObject suggest(String q)throws Exception{return request("subject/search-suggest","POST",new JSONObject().put("keyword",q),"",false);}
+  public JSONObject search(String q,int page)throws Exception{
+    if(token().isEmpty())home();
+    JSONObject body=new JSONObject().put("keyword",q).put("page",Math.max(1,page)).put("perPage",24);
+    return request("subject/search","POST",body,token(),false);
+  }
+  public JSONObject detail(String id)throws Exception{
+    if(token().isEmpty())home();
+    return request("detail?subjectId="+URLEncoder.encode(id,"UTF-8"),"GET",null,token(),false);
+  }
+  public JSONObject play(String id,String detailPath,int se,int ep)throws Exception{
+    home(); String p="subject/play?subjectId="+URLEncoder.encode(id,"UTF-8")+"&se="+Math.max(0,se)+"&ep="+Math.max(0,ep);
+    if(detailPath!=null&&!detailPath.isEmpty())p+="&detailPath="+URLEncoder.encode(detailPath,"UTF-8");
+    return request(p,"GET",null,token(),true);
+  }
+  private JSONObject request(String path,String method,JSONObject body,String token,boolean playback)throws Exception{
+    String[] bases=playback?new String[]{BASES[1],BASES[0]}:BASES; Exception last=null;
+    for(String b:bases)try{return read(connect(b+path,method,body,token));}catch(Exception e){last=e;}
+    throw last==null?new IOException("MovieBox request failed"):last;
+  }
+  private HttpURLConnection connect(String url,String method,JSONObject body,String token)throws Exception{
+    HttpURLConnection c=(HttpURLConnection)new URL(url).openConnection();
+    c.setRequestMethod(method);c.setConnectTimeout(15000);c.setReadTimeout(25000);c.setUseCaches(false);
+    c.setRequestProperty("User-Agent",UA);c.setRequestProperty("Origin","https://movieboxph.org");
+    c.setRequestProperty("Referer","https://movieboxph.org/");c.setRequestProperty("Accept","*/*");
+    c.setRequestProperty("Accept-Language","en-US,en;q=0.9");c.setRequestProperty("x-request-lang","en");
+    c.setRequestProperty("x-client-info","{\"timezone\":\"Asia/Calcutta\"}");
+    c.setRequestProperty("Cache-Control","no-cache");c.setRequestProperty("Pragma","no-cache");
+    c.setRequestProperty("Accept-Encoding","identity");
+    if(token!=null&&!token.isEmpty()){String t=token.replaceFirst("(?i)^Bearer\\s+","");c.setRequestProperty("Authorization","Bearer "+t);c.setRequestProperty("x-user",t);}
+    if(body!=null){c.setDoOutput(true);c.setRequestProperty("Content-Type","application/json");byte[] bytes=body.toString().getBytes(StandardCharsets.UTF_8);try(OutputStream o=c.getOutputStream()){o.write(bytes);}}
+    return c;
+  }
+  private JSONObject read(HttpURLConnection c)throws Exception{
+    int code=c.getResponseCode();InputStream in=code>=200&&code<300?c.getInputStream():c.getErrorStream();
+    StringBuilder s=new StringBuilder();if(in!=null)try(BufferedReader r=new BufferedReader(new InputStreamReader(in,StandardCharsets.UTF_8))){String l;while((l=r.readLine())!=null)s.append(l);}
+    c.disconnect();if(code<200||code>=300)throw new IOException("MovieBox HTTP "+code+" "+s);
+    JSONObject j=new JSONObject(s.toString());if(j.has("code")&&j.optInt("code")!=0)throw new IOException(j.optString("message","MovieBox API error"));
+    return j;
+  }
+}
