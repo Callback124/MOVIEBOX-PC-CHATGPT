@@ -293,7 +293,8 @@
           episode: Number(o.episode || 0),
           detailPath: o.detailPath || '',
           token: o.token || '',
-          dubs: Array.isArray(o.dubs) ? o.dubs : []
+          dubs: Array.isArray(o.dubs) ? o.dubs : [],
+          episodeSequence: Array.isArray(o.episodeSequence) ? o.episodeSequence : []
         });
         return true;
       } catch (error) {
