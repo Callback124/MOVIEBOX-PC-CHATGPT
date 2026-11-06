@@ -285,7 +285,8 @@
           title: o.title || '',
           position: store.get('mbp:pos:' + o.src, 0),
           format: o.format || '',
-          headers: o.headers || {}
+          headers: o.headers || {},
+          sources: Array.isArray(o.sources) ? o.sources : []
         });
         return true;
       } catch (error) {
