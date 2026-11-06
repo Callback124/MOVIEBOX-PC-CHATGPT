@@ -1195,7 +1195,7 @@ public class PlayerActivity extends Activity {
                 connection.setRequestProperty("Accept", "*/*");
                 connection.setRequestProperty("Origin", "https://movieboxph.org");
                 connection.setRequestProperty("Referer", "https://movieboxph.org/");
-                connection.setRequestProperty("x-client-info", "{\\"timezone\\":\\"Asia/Calcutta\\"}");
+                connection.setRequestProperty("x-client-info", "{\"timezone\":\"Asia/Calcutta\"}");
                 connection.setRequestProperty("x-request-lang", "en");
                 if (movieBoxToken != null && !movieBoxToken.isEmpty()) {
                     String clean = movieBoxToken.replaceFirst("(?i)^Bearer\\s+", "");
