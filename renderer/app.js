@@ -514,9 +514,10 @@ async function movieBoxDetailView(id) {
         chipBox.querySelectorAll('.chip').forEach((node) => node.classList.remove('on'));
         chip.classList.add('on');
         // Player opens now; native player resolves this subject's exact title while fetching streams.
+        const episodeSuffix = firstEpisode ? ' · S' + seasonNo + ' E' + episodeNo : '';
         playMovieBoxEpisode(
           String(dub.subjectId), seasonNo, episodeNo,
-          String(dub.title || dub.name || title),
+          String(dub.title || dub.name || title) + episodeSuffix,
           String(dub.detailPath || detailPath), dubEntries
         );
       };
@@ -555,13 +556,19 @@ async function movieBoxDetailView(id) {
       const list = $('#mb-episode-list', episodesBox); list.innerHTML = '';
       const maxEp = season ? season.__maxEp : 0;
       for (let ep = 1; ep <= maxEp; ep++) {
-        const item = html('<div class="ep" aria-label="Season ' + Number(seasonNo) + ' Episode ' + ep + '"><div class="still"><span class="ep-number">E' + ep + '</span></div><div class="b"><b>Episode ' + ep + '</b><small>Season ' + Number(seasonNo) + '</small><button class="btn primary ep-watch" type="button">▶ Watch</button></div></div>');
-        $('.ep-watch', item).onclick = () => playMovieBoxEpisode(String(id), Number(seasonNo), ep, title + ' · S' + seasonNo + ' E' + ep, detailPath);
+        const item = html('<div class="ep" aria-label="Season ' + Number(seasonNo) + ' Episode ' + ep + '"><div class="still"><span class="ep-number">E' + ep + '</span></div><div class="b"><b>Episode ' + ep + '</b><small>Season ' + Number(seasonNo) + '</small></div></div>');
         list.appendChild(item);
       }
     };
     $('#mb-season', episodesBox).onchange = (event) => renderEpisodes(event.target.value);
     renderEpisodes(seasonList[0]?.__seasonNo || 1);
+    const firstEpisode = window.__mbEpisodeSequence[0];
+    if (firstEpisode) {
+      const watchButton = html('<button class="btn primary">▶ Watch</button>');
+      watchButton.onclick = () => playMovieBoxEpisode(String(id), firstEpisode.se, firstEpisode.ep,
+        title + ' · S' + firstEpisode.se + ' E' + firstEpisode.ep, detailPath);
+      actions.insertBefore(watchButton, listButton);
+    }
   } else if (identity.isSeries) {
     episodesBox.innerHTML = '<p class="note pad">Episode list was not included in the detail response.</p>';
   }
