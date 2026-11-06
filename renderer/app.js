@@ -540,20 +540,21 @@ async function movieBoxDetailView(id) {
   const episodesBox = $('.mb-episodes', page);
   window.__mbEpisodeSequence = [];
   if (identity.isSeries && seasons.length) {
-    const usable = seasons.filter((s) => Number(s.se) > 0 && Number(s.maxEp) > 0);
-    const seasonList = usable.length ? usable : seasons;
+    const seasonList = seasons.map((s, index) => ({
+      ...s,
+      __seasonNo: Number(s.se || s.season || s.seasonNo || index + 1),
+      __maxEp: Math.max(0, Math.min(500, Number(s.maxEp || s.maxEpisode || s.episodeCount || s.totalEpisodes || 0)))
+    })).filter((s) => s.__seasonNo > 0 && s.__maxEp > 0);
     episodesBox.innerHTML = '<div class="section-head"><h3>Episodes</h3><select class="sel" id="mb-season">' +
-      seasonList.map((s) => '<option value="' + Number(s.se) + '">Season ' + Number(s.se) + ' · ' + Number(s.maxEp || 0) + ' Episodes</option>').join('') +
+      seasonList.map((s) => '<option value="' + s.__seasonNo + '">Season ' + s.__seasonNo + ' · ' + s.__maxEp + ' Episodes</option>').join('') +
       '</select></div><div class="eps" id="mb-episode-list"></div>';
-    window.__mbEpisodeSequence = seasonList.flatMap((season) => {
-      const seasonNo = Number(season.se || season.season || 0);
-      const maxEp = Math.max(0, Math.min(500, Number(season.maxEp || season.maxEpisode || season.episodeCount || 0)));
-      return seasonNo > 0 ? Array.from({length: maxEp}, (_, i) => ({se:seasonNo,ep:i+1})) : [];
-    });
+    window.__mbEpisodeSequence = seasonList.flatMap((season) =>
+      Array.from({length: season.__maxEp}, (_, i) => ({se:season.__seasonNo,ep:i+1}))
+    );
     const renderEpisodes = (seasonNo) => {
-      const season = seasonList.find((s) => Number(s.se) === Number(seasonNo));
+      const season = seasonList.find((s) => s.__seasonNo === Number(seasonNo));
       const list = $('#mb-episode-list', episodesBox); list.innerHTML = '';
-      const maxEp = Math.max(0, Math.min(500, Number(season?.maxEp || 0)));
+      const maxEp = season ? season.__maxEp : 0;
       for (let ep = 1; ep <= maxEp; ep++) {
         const item = html('<button class="ep" type="button" aria-label="Play Season ' + Number(seasonNo) + ' Episode ' + ep + '"><div class="still"><span class="ep-number">E' + ep + '</span></div><div class="b"><b>Episode ' + ep + '</b><small>Season ' + Number(seasonNo) + '</small></div></button>');
         item.onclick = () => playMovieBoxEpisode(String(id), Number(seasonNo), ep, title + ' · S' + seasonNo + ' E' + ep, detailPath);
@@ -561,7 +562,7 @@ async function movieBoxDetailView(id) {
       }
     };
     $('#mb-season', episodesBox).onchange = (event) => renderEpisodes(event.target.value);
-    renderEpisodes(seasonList[0]?.se || 1);
+    renderEpisodes(seasonList[0]?.__seasonNo || 1);
   } else if (identity.isSeries) {
     episodesBox.innerHTML = '<p class="note pad">Episode list was not included in the detail response.</p>';
   }
