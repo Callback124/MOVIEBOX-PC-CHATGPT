@@ -947,17 +947,7 @@ public class PlayerActivity extends Activity {
             boolean on = refs.size() == 1 || (videoForced && r.group.isTrackSelected(r.index));
             out.add(new Opt(r.format.height > 0 ? r.format.height + "p" : "Auto", on, () -> selectTrack(r)));
         }
-        if (refs.isEmpty() && sourceVariants.length() == 0) out.add(new Opt(resourcesLoading ? "Loading MovieBox resources…" : "No video tracks", false, () -> { }));
-        for (int i = 0; i < sourceVariants.length(); i++) {
-            final JSONObject source = sourceVariants.optJSONObject(i);
-            if (source == null) continue;
-            final String sourceUrl = source.optString("url", "");
-            if (sourceUrl.isEmpty()) continue;
-            final String format = source.optString("format", "");
-            final String quality = source.optString("quality", "Quality unknown");
-            final String label = quality;
-            out.add(new Opt(label, sourceUrl.equals(activeSourceUrl), () -> switchSource(source)));
-        }
+        if (refs.isEmpty()) out.add(new Opt(resourcesLoading ? "Loading…" : "Auto", false, () -> { }));
         return out;
     }
 
@@ -1126,9 +1116,8 @@ public class PlayerActivity extends Activity {
             out.add(new Opt(name, selected, () -> {
                 movieBoxSubjectId = id;
                 movieBoxDetailPath = dub.optString("detailPath", "");
-                if (!originalPlayerTitle.endsWith(" · " + name)) {
-                    basePlayerTitle = originalPlayerTitle + " · " + name;
-                }
+                String apiTitle = dub.optString("title", dub.optString("name", "")).trim();
+                basePlayerTitle = apiTitle.isEmpty() ? originalPlayerTitle : apiTitle;
                 titleView.setText(basePlayerTitle);
                 fetchMovieBoxResources(movieBoxSubjectId, movieBoxDetailPath, movieBoxSeason, movieBoxEpisode, true);
                 toast("Loading " + name + " resources…");
@@ -1146,13 +1135,27 @@ public class PlayerActivity extends Activity {
         return -1;
     }
 
-    private boolean hasNextEpisode() { int i = currentEpisodeIndex(); return i >= 0 && i + 1 < episodeSequence.length(); }
-    private boolean hasPreviousEpisode() { int i = currentEpisodeIndex(); return i > 0; }
+    private boolean hasNextEpisode() {
+        int i = currentEpisodeIndex();
+        return episodeSequence.length() > 0 && (i < 0 || i + 1 < episodeSequence.length());
+    }
+    private boolean hasPreviousEpisode() {
+        int i = currentEpisodeIndex();
+        return i > 0;
+    }
 
     private void updateEpisodeControls() {
-        boolean episodic = episodeSequence.length() > 0 && movieBoxMode;
-        if (previousEpisodeBtn != null) previousEpisodeBtn.setVisibility(episodic && hasPreviousEpisode() ? View.VISIBLE : View.GONE);
-        if (nextEpisodeBtn != null) nextEpisodeBtn.setVisibility(episodic && hasNextEpisode() ? View.VISIBLE : View.GONE);
+        boolean episodic = movieBoxMode && episodeSequence.length() > 0;
+        if (previousEpisodeBtn != null) {
+            previousEpisodeBtn.setVisibility(episodic ? View.VISIBLE : View.GONE);
+            previousEpisodeBtn.setEnabled(episodic && hasPreviousEpisode());
+            previousEpisodeBtn.setAlpha(hasPreviousEpisode() ? 1f : 0.35f);
+        }
+        if (nextEpisodeBtn != null) {
+            nextEpisodeBtn.setVisibility(episodic ? View.VISIBLE : View.GONE);
+            nextEpisodeBtn.setEnabled(episodic && hasNextEpisode());
+            nextEpisodeBtn.setAlpha(hasNextEpisode() ? 1f : 0.35f);
+        }
     }
 
     private void updateEpisodeSubtitle() {
@@ -1165,8 +1168,9 @@ public class PlayerActivity extends Activity {
 
     private void playAdjacentEpisode(int direction) {
         int index = currentEpisodeIndex();
+        if (index < 0 && direction > 0) index = -1;
         int target = index + direction;
-        if (index < 0 || target < 0 || target >= episodeSequence.length()) return;
+        if (target < 0 || target >= episodeSequence.length()) return;
         JSONObject next = episodeSequence.optJSONObject(target);
         if (next == null) return;
         movieBoxSeason = next.optInt("se", movieBoxSeason);
