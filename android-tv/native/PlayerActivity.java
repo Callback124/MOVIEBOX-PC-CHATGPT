@@ -279,7 +279,7 @@ public class PlayerActivity extends Activity {
         updateEpisodeSubtitle();
         String format = getIntent().getStringExtra("format");
         long pos = getIntent().getLongExtra("pos", 0L);
-        titleView.setText(title == null ? "" : title);
+        titleView.setText(formatEpisodeTitle(basePlayerTitle));
         if (url != null && !url.trim().isEmpty()) {
             MediaItem.Builder mediaItemBuilder = new MediaItem.Builder()
                     .setUri(Uri.parse(url))
@@ -295,7 +295,7 @@ public class PlayerActivity extends Activity {
             if (pos > 0) player.seekTo(pos);
             player.setPlayWhenReady(true);
         } else if (movieBoxMode) {
-            titleView.setText((title == null ? "" : title) + "  •  Loading resources…");
+            titleView.setText(formatEpisodeTitle(basePlayerTitle) + "  •  Loading resources…");
             fetchMovieBoxResources(movieBoxSubjectId, movieBoxDetailPath, movieBoxSeason, movieBoxEpisode, false);
         } else {
             toast("No video URL was supplied");
@@ -1022,7 +1022,7 @@ public class PlayerActivity extends Activity {
                     runOnUiThread(() -> {
                         sourceVariants = orderedSources;
                         activeSourceUrl = first.optString("url", "");
-                        titleView.setText(basePlayerTitle);
+                        titleView.setText(formatEpisodeTitle(basePlayerTitle));
                         playSource(first, resumeAt);
                         if (sheetOpen) renderSheet(false);
                     });
@@ -1169,7 +1169,7 @@ public class PlayerActivity extends Activity {
                     final String finalTitle = resolvedTitle == null || resolvedTitle.trim().isEmpty() ? fallbackTitle : resolvedTitle.trim();
                     runOnUiThread(() -> {
                         basePlayerTitle = finalTitle;
-                        titleView.setText(basePlayerTitle);
+                        titleView.setText(formatEpisodeTitle(basePlayerTitle));
                         fetchMovieBoxResources(movieBoxSubjectId, movieBoxDetailPath, movieBoxSeason, movieBoxEpisode, true);
                         if (sheetOpen) renderSheet(false);
                     });
@@ -1251,11 +1251,18 @@ public class PlayerActivity extends Activity {
         }
     }
 
+    private String formatEpisodeTitle(String rawTitle) {
+        String clean = rawTitle == null ? "" : rawTitle.trim();
+        if (!movieBoxMode || episodeSequence.length() == 0 || movieBoxEpisode <= 0) return clean;
+        clean = clean.replaceAll("(?i)\\s*[·|—-]?\\s*S\\d{1,2}\\s*E\\d{1,3}\\s*$", "").trim();
+        return clean + " · S" + String.format(Locale.US, "%02d", movieBoxSeason)
+                + " E" + String.format(Locale.US, "%02d", movieBoxEpisode);
+    }
+
     private void updateEpisodeSubtitle() {
         if (episodeSubtitleView == null) return;
-        boolean episodic = episodeSequence.length() > 0 && movieBoxMode;
-        // The selected episode is already included in the player title; avoid a duplicate subtitle row.
         episodeSubtitleView.setVisibility(View.GONE);
+        if (titleView != null) titleView.setText(formatEpisodeTitle(basePlayerTitle));
         updateEpisodeControls();
     }
 
