@@ -376,13 +376,14 @@ public class PlayerActivity extends Activity {
         topBar = new LinearLayout(this);
         topBar.setOrientation(LinearLayout.HORIZONTAL);
         topBar.setGravity(Gravity.CENTER_VERTICAL);
-        topBar.setPadding(dp(24), dp(14), dp(24), 0);
+        int sideInset = Math.max(dp(24), (int)(getResources().getDisplayMetrics().widthPixels * 0.035f));
+        topBar.setPadding(sideInset, dp(14), sideInset, 0);
         backBtn = iconButton("down", 10);
         backBtn.setOnClickListener(v -> finish());
         topBar.addView(backBtn, new LinearLayout.LayoutParams(dp(48), dp(48)));
         titleView = new TextView(this);
         titleView.setTextColor(Color.WHITE);
-        titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 19);
+        titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
         titleView.setTypeface(Typeface.DEFAULT_BOLD);
         titleView.setSingleLine(true);
         titleView.setEllipsize(TextUtils.TruncateAt.END);
@@ -414,8 +415,8 @@ public class PlayerActivity extends Activity {
         playBtn = iconButton("play", 20);
         playBtn.setOnClickListener(v -> togglePlay());
         LinearLayout.LayoutParams pp = new LinearLayout.LayoutParams(dp(88), dp(88));
-        pp.leftMargin = dp(56);
-        pp.rightMargin = dp(56);
+        pp.leftMargin = dp(68);
+        pp.rightMargin = dp(68);
         centerRow.addView(playBtn, pp);
         centerRow.addView(skipCell("ic_forward", 10000), new LinearLayout.LayoutParams(dp(64), dp(64)));
         nextEpisodeBtn = iconButton("next", 16);
@@ -427,9 +428,9 @@ public class PlayerActivity extends Activity {
         // ---- bottom: seek bar, time, icon row
         bottomBar = new LinearLayout(this);
         bottomBar.setOrientation(LinearLayout.VERTICAL);
-        bottomBar.setPadding(dp(24), 0, dp(24), dp(12));
+        bottomBar.setPadding(sideInset, 0, sideInset, dp(18));
         seek = new SeekView(this);
-        bottomBar.addView(seek, new LinearLayout.LayoutParams(MATCH, dp(36)));
+        bottomBar.addView(seek, new LinearLayout.LayoutParams(MATCH, dp(34)));
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
