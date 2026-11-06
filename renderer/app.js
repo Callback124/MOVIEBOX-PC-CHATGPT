@@ -430,16 +430,9 @@ async function playMovieBoxEpisode(subjectId, se, ep, title, detailPath = '', du
   const status = $('.mb-play-status');
   try {
     if (typeof window.MB_play !== 'function') throw new Error('Built-in ExoPlayer bridge is unavailable. Install the latest Android APK.');
-    const nativeApi = window.Capacitor?.Plugins?.MovieBoxHomeApi;
-    let token = (window.__movieBoxSessionToken || store.get('movieboxToken', '') || '').trim();
-    if (nativeApi?.getHome) {
-      const home = await nativeApi.getHome();
-      if (home?.token) {
-        token = String(home.token).trim();
-        window.__movieBoxSessionToken = token;
-        store.set('movieboxToken', token);
-      }
-    }
+    // Launch the native player immediately. Session refresh, detail/title lookup and stream
+    // discovery happen after the player screen is visible, inside the native player.
+    const token = (window.__movieBoxSessionToken || store.get('movieboxToken', '') || '').trim();
     const dubs = Array.isArray(dubList) ? dubList : ((window.__mbDubsBySubject && window.__mbDubsBySubject[String(subjectId)]) || []);
     const headers = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36',
@@ -449,12 +442,16 @@ async function playMovieBoxEpisode(subjectId, se, ep, title, detailPath = '', du
       'x-client-info': JSON.stringify({ timezone: 'Asia/Calcutta' }),
       'x-request-lang': 'en'
     };
-    if (status) { status.style.display = 'block'; status.textContent = 'Opening ExoPlayer… Resources will load inside the player.'; }
+    if (status) { status.style.display = 'block'; status.textContent = 'Opening ExoPlayer…'; }
     const episodeSequence = Array.isArray(window.__mbEpisodeSequence) ? window.__mbEpisodeSequence : [];
-    await window.MB_play({
+    const launch = window.MB_play({
       src: '', format: '', title, headers,
       movieBox: true, subjectId: String(subjectId), season: Number(se), episode: Number(ep),
       detailPath: String(detailPath || ''), token, dubs, episodeSequence
+    });
+    Promise.resolve(launch).catch((error) => {
+      if (status) status.textContent = 'Player launch error: ' + (error?.message || error);
+      else console.error('MovieBox playback error:', error);
     });
   } catch (error) {
     if (status) { status.style.display = 'block'; status.textContent = 'Player launch error: ' + (error?.message || error); }
@@ -510,38 +507,18 @@ async function movieBoxDetailView(id) {
       const label = String(dub.lanName || dub.lanCode || (dub.original ? 'Original Audio' : 'Dub')).replace(/\\s+/g, ' ').trim();
       const chip = html('<button type="button" class="chip">' + esc(label) + '</button>');
       if (String(dub.subjectId) === String(id)) chip.classList.add('on');
-      chip.onclick = async () => {
+      chip.onclick = () => {
         const firstEpisode = Array.isArray(window.__mbEpisodeSequence) ? window.__mbEpisodeSequence[0] : null;
         const seasonNo = firstEpisode ? Number(firstEpisode.se) : 0;
         const episodeNo = firstEpisode ? Number(firstEpisode.ep) : 0;
-        const episodeLabel = firstEpisode ? ' · S' + seasonNo + ' E' + episodeNo : '';
-        const status = $('.mb-play-status');
-        if (status) { status.style.display = 'block'; status.textContent = 'Loading selected audio version title…'; }
-        try {
-          const detail = await movieBoxApiGet('detail', { subjectId: String(dub.subjectId) });
-          const dubSubject = detail?.data?.subject || detail?.subject || {};
-          const exactTitle = String(dubSubject.title || dubSubject.name || '').trim();
-          if (!exactTitle) throw new Error('Selected dub detail did not return a title');
-          const enrichedDubs = await Promise.all(dubEntries.map(async (entry) => {
-            if (String(entry.subjectId) === String(dub.subjectId)) return { ...entry, title: exactTitle };
-            if (entry.title || entry.name) return entry;
-            try {
-              const response = await movieBoxApiGet('detail', { subjectId: String(entry.subjectId) });
-              const subjectData = response?.data?.subject || response?.subject || {};
-              const fetchedTitle = String(subjectData.title || subjectData.name || '').trim();
-              return fetchedTitle ? { ...entry, title: fetchedTitle } : entry;
-            } catch (_) { return entry; }
-          }));
-          chipBox.querySelectorAll('.chip').forEach((node) => node.classList.remove('on'));
-          chip.classList.add('on');
-          playMovieBoxEpisode(
-            String(dub.subjectId), seasonNo, episodeNo,
-            exactTitle + episodeLabel,
-            String(dub.detailPath || dubSubject.detailPath || ''), enrichedDubs
-          );
-        } catch (error) {
-          if (status) status.textContent = 'Dub title load failed: ' + (error?.message || error);
-        }
+        chipBox.querySelectorAll('.chip').forEach((node) => node.classList.remove('on'));
+        chip.classList.add('on');
+        // Player opens now; native player resolves this subject's exact title while fetching streams.
+        playMovieBoxEpisode(
+          String(dub.subjectId), seasonNo, episodeNo,
+          String(dub.title || dub.name || title),
+          String(dub.detailPath || detailPath), dubEntries
+        );
       };
       chipBox.appendChild(chip);
     });
@@ -578,8 +555,8 @@ async function movieBoxDetailView(id) {
       const list = $('#mb-episode-list', episodesBox); list.innerHTML = '';
       const maxEp = season ? season.__maxEp : 0;
       for (let ep = 1; ep <= maxEp; ep++) {
-        const item = html('<button class="ep" type="button" aria-label="Play Season ' + Number(seasonNo) + ' Episode ' + ep + '"><div class="still"><span class="ep-number">E' + ep + '</span></div><div class="b"><b>Episode ' + ep + '</b><small>Season ' + Number(seasonNo) + '</small></div></button>');
-        item.onclick = () => playMovieBoxEpisode(String(id), Number(seasonNo), ep, title + ' · S' + seasonNo + ' E' + ep, detailPath);
+        const item = html('<div class="ep" aria-label="Season ' + Number(seasonNo) + ' Episode ' + ep + '"><div class="still"><span class="ep-number">E' + ep + '</span></div><div class="b"><b>Episode ' + ep + '</b><small>Season ' + Number(seasonNo) + '</small><button class="btn primary ep-watch" type="button">▶ Watch</button></div></div>');
+        $('.ep-watch', item).onclick = () => playMovieBoxEpisode(String(id), Number(seasonNo), ep, title + ' · S' + seasonNo + ' E' + ep, detailPath);
         list.appendChild(item);
       }
     };
