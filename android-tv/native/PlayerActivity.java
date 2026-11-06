@@ -102,6 +102,11 @@ public class PlayerActivity extends Activity {
     private JSONArray sourceVariants = new JSONArray();
     private String activeSourceUrl = "";
     private JSONArray dubVariants = new JSONArray();
+    private JSONArray episodeSequence = new JSONArray();
+    private TextView episodeSubtitleView;
+    private ImageView previousEpisodeBtn;
+    private ImageView nextEpisodeBtn;
+    private String basePlayerTitle = "";
     private String movieBoxSubjectId = "";
     private String movieBoxDetailPath = "";
     private String movieBoxToken = "";
@@ -247,7 +252,7 @@ public class PlayerActivity extends Activity {
             @Override
             public void onPlaybackStateChanged(int state) {
                 updatePlayIcon();
-                if (state == Player.STATE_ENDED) showControls();
+                if (state == Player.STATE_ENDED) { showControls(); if (hasNextEpisode()) playAdjacentEpisode(1); }
             }
 
             @Override
@@ -260,6 +265,7 @@ public class PlayerActivity extends Activity {
         activeSourceUrl = url == null ? "" : url;
         try { sourceVariants = new JSONArray(getIntent().getStringExtra("sources") == null ? "[]" : getIntent().getStringExtra("sources")); } catch (Exception ignored) { sourceVariants = new JSONArray(); }
         try { dubVariants = new JSONArray(getIntent().getStringExtra("dubs") == null ? "[]" : getIntent().getStringExtra("dubs")); } catch (Exception ignored) { dubVariants = new JSONArray(); }
+        try { episodeSequence = new JSONArray(getIntent().getStringExtra("episodeSequence") == null ? "[]" : getIntent().getStringExtra("episodeSequence")); } catch (Exception ignored) { episodeSequence = new JSONArray(); }
         movieBoxMode = getIntent().getBooleanExtra("movieBox", false);
         movieBoxSubjectId = getIntent().getStringExtra("subjectId");
         movieBoxDetailPath = getIntent().getStringExtra("detailPath");
@@ -267,6 +273,8 @@ public class PlayerActivity extends Activity {
         movieBoxSeason = getIntent().getIntExtra("season", 0);
         movieBoxEpisode = getIntent().getIntExtra("episode", 0);
         String title = getIntent().getStringExtra("title");
+        basePlayerTitle = title == null ? "" : title;
+        updateEpisodeSubtitle();
         String format = getIntent().getStringExtra("format");
         long pos = getIntent().getLongExtra("pos", 0L);
         titleView.setText(title == null ? "" : title);
@@ -378,7 +386,15 @@ public class PlayerActivity extends Activity {
         titleView.setShadowLayer(4f, 0f, 1f, Color.BLACK);
         LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(0, WRAP, 1f);
         tp.leftMargin = dp(10);
-        topBar.addView(titleView, tp);
+        LinearLayout titleColumn = new LinearLayout(this);
+        titleColumn.setOrientation(LinearLayout.VERTICAL);
+        titleColumn.setGravity(Gravity.CENTER_VERTICAL);
+        titleColumn.addView(titleView, new LinearLayout.LayoutParams(MATCH, WRAP));
+        episodeSubtitleView = new TextView(this);
+        episodeSubtitleView.setTextColor(0xCCFFFFFF);
+        episodeSubtitleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        titleColumn.addView(episodeSubtitleView, new LinearLayout.LayoutParams(MATCH, WRAP));
+        topBar.addView(titleColumn, tp);
         lockBtn = iconButton("ic_lock_open", 10);
         lockBtn.setOnClickListener(v -> setLocked(!locked));
         topBar.addView(lockBtn, new LinearLayout.LayoutParams(dp(48), dp(48)));
@@ -388,6 +404,9 @@ public class PlayerActivity extends Activity {
         centerRow = new LinearLayout(this);
         centerRow.setOrientation(LinearLayout.HORIZONTAL);
         centerRow.setGravity(Gravity.CENTER);
+        previousEpisodeBtn = iconButton("ic_skip_previous", 16);
+        previousEpisodeBtn.setOnClickListener(v -> playAdjacentEpisode(-1));
+        centerRow.addView(previousEpisodeBtn, new LinearLayout.LayoutParams(dp(52), dp(64)));
         centerRow.addView(skipCell("ic_replay", -10000), new LinearLayout.LayoutParams(dp(64), dp(64)));
         playBtn = iconButton("ic_play", 20);
         playBtn.setOnClickListener(v -> togglePlay());
@@ -396,6 +415,10 @@ public class PlayerActivity extends Activity {
         pp.rightMargin = dp(56);
         centerRow.addView(playBtn, pp);
         centerRow.addView(skipCell("ic_forward", 10000), new LinearLayout.LayoutParams(dp(64), dp(64)));
+        nextEpisodeBtn = iconButton("ic_skip_next", 16);
+        nextEpisodeBtn.setOnClickListener(v -> playAdjacentEpisode(1));
+        centerRow.addView(nextEpisodeBtn, new LinearLayout.LayoutParams(dp(52), dp(64)));
+        updateEpisodeControls();
         ui.addView(centerRow, new FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER));
 
         // ---- bottom: seek bar, time, icon row
@@ -417,12 +440,7 @@ public class PlayerActivity extends Activity {
         addButton(row, "ic_audio", v -> openSheet(0, 1));
         addButton(row, "ic_quality", v -> openSheet(0, 0));
         addButton(row, "ic_cc", v -> openSheet(1, 0));
-        addButton(row, "ic_speed", v -> cycleSpeed());
         addButton(row, "ic_fit", v -> cycleFit());
-        ImageView pip = addButton(row, "ic_pip", v -> enterPip());
-        if (Build.VERSION.SDK_INT < 26 || !getPackageManager().hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) {
-            pip.setVisibility(View.GONE);
-        }
         bottomBar.addView(row, new LinearLayout.LayoutParams(MATCH, WRAP));
         ui.addView(bottomBar, new FrameLayout.LayoutParams(MATCH, WRAP, Gravity.BOTTOM));
 
@@ -925,7 +943,7 @@ public class PlayerActivity extends Activity {
         }
         for (final TrackRef r : refs) {
             boolean on = refs.size() == 1 || (videoForced && r.group.isTrackSelected(r.index));
-            out.add(new Opt(videoLabel(r.format), on, () -> selectTrack(r)));
+            out.add(new Opt(r.format.height > 0 ? r.format.height + "p" : "Auto", on, () -> selectTrack(r)));
         }
         if (refs.isEmpty() && sourceVariants.length() == 0) out.add(new Opt(resourcesLoading ? "Loading MovieBox resources…" : "No video tracks", false, () -> { }));
         for (int i = 0; i < sourceVariants.length(); i++) {
@@ -986,7 +1004,7 @@ public class PlayerActivity extends Activity {
                     runOnUiThread(() -> {
                         sourceVariants = found;
                         activeSourceUrl = first.optString("url", "");
-                        titleView.setText(getIntent().getStringExtra("title") + "  •  " + first.optString("quality", "Auto"));
+                        titleView.setText(basePlayerTitle);
                         playSource(first, resumeAt);
                         if (sheetOpen) renderSheet(false);
                     });
@@ -1099,6 +1117,43 @@ public class PlayerActivity extends Activity {
         return out;
     }
 
+    private int currentEpisodeIndex() {
+        for (int i = 0; i < episodeSequence.length(); i++) {
+            JSONObject item = episodeSequence.optJSONObject(i);
+            if (item != null && item.optInt("se", -1) == movieBoxSeason && item.optInt("ep", -1) == movieBoxEpisode) return i;
+        }
+        return -1;
+    }
+
+    private boolean hasNextEpisode() { int i = currentEpisodeIndex(); return i >= 0 && i + 1 < episodeSequence.length(); }
+    private boolean hasPreviousEpisode() { int i = currentEpisodeIndex(); return i > 0; }
+
+    private void updateEpisodeControls() {
+        boolean episodic = episodeSequence.length() > 0 && movieBoxMode;
+        if (previousEpisodeBtn != null) previousEpisodeBtn.setVisibility(episodic && hasPreviousEpisode() ? View.VISIBLE : View.GONE);
+        if (nextEpisodeBtn != null) nextEpisodeBtn.setVisibility(episodic && hasNextEpisode() ? View.VISIBLE : View.GONE);
+    }
+
+    private void updateEpisodeSubtitle() {
+        if (episodeSubtitleView == null) return;
+        boolean episodic = episodeSequence.length() > 0 && movieBoxMode;
+        episodeSubtitleView.setVisibility(episodic ? View.VISIBLE : View.GONE);
+        if (episodic) episodeSubtitleView.setText(String.format(Locale.US, "S%02d  EP %d", movieBoxSeason, movieBoxEpisode));
+        updateEpisodeControls();
+    }
+
+    private void playAdjacentEpisode(int direction) {
+        int index = currentEpisodeIndex();
+        int target = index + direction;
+        if (index < 0 || target < 0 || target >= episodeSequence.length()) return;
+        JSONObject next = episodeSequence.optJSONObject(target);
+        if (next == null) return;
+        movieBoxSeason = next.optInt("se", movieBoxSeason);
+        movieBoxEpisode = next.optInt("ep", movieBoxEpisode);
+        updateEpisodeSubtitle();
+        fetchMovieBoxResources(movieBoxSubjectId, movieBoxDetailPath, movieBoxSeason, movieBoxEpisode, false);
+    }
+
     private void switchSource(JSONObject source) {
         if (player == null || source == null) return;
         String url = source.optString("url", "");
@@ -1148,7 +1203,7 @@ public class PlayerActivity extends Activity {
             if (name.isEmpty()) name = "Subtitles " + n;
             out.add(new Opt(name, r.group.isTrackSelected(r.index), () -> selectTrack(r)));
         }
-        if (refs.isEmpty()) out.add(new Opt("No subtitles available", false, () -> { }));
+        if (refs.isEmpty()) out.add(new Opt("No dubbed languages available", false, () -> { }));
         return out;
     }
 
