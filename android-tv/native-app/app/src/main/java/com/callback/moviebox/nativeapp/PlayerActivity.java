@@ -90,10 +90,10 @@ public class PlayerActivity extends Activity {
     private LinearLayout topBar;
     private LinearLayout centerRow;
     private LinearLayout bottomBar;
-    private TextView backBtn;
-    private TextView lockBtn;
-    private TextView playBtn;
-    private TextView volBtn;
+    private IconView backBtn;
+    private IconView lockBtn;
+    private IconView playBtn;
+    private IconView volBtn;
     private TextView titleView;
     private TextView timeView;
     private SeekView seek;
@@ -327,7 +327,7 @@ public class PlayerActivity extends Activity {
     private void updatePlayIcon() {
         if (player == null || playBtn == null) return;
         boolean playing = player.getPlayWhenReady() && player.getPlaybackState() != Player.STATE_ENDED;
-        playBtn.setText(playing ? "Ⅱ" : "▶");
+        playBtn.setKind(playing ? "pause" : "play");
     }
 
     private void updateProgress() {
@@ -376,7 +376,7 @@ public class PlayerActivity extends Activity {
         topBar.setOrientation(LinearLayout.HORIZONTAL);
         topBar.setGravity(Gravity.CENTER_VERTICAL);
         topBar.setPadding(dp(24), dp(14), dp(24), 0);
-        backBtn = iconButton("ic_chevron_down", 10);
+        backBtn = iconButton("down", 10);
         backBtn.setOnClickListener(v -> finish());
         topBar.addView(backBtn, new LinearLayout.LayoutParams(dp(48), dp(48)));
         titleView = new TextView(this);
@@ -397,7 +397,7 @@ public class PlayerActivity extends Activity {
         episodeSubtitleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
         titleColumn.addView(episodeSubtitleView, new LinearLayout.LayoutParams(MATCH, WRAP));
         topBar.addView(titleColumn, tp);
-        lockBtn = iconButton("ic_lock_open", 10);
+        lockBtn = iconButton("lockOpen", 10);
         lockBtn.setOnClickListener(v -> setLocked(!locked));
         topBar.addView(lockBtn, new LinearLayout.LayoutParams(dp(48), dp(48)));
         ui.addView(topBar, new FrameLayout.LayoutParams(MATCH, WRAP, Gravity.TOP));
@@ -406,20 +406,20 @@ public class PlayerActivity extends Activity {
         centerRow = new LinearLayout(this);
         centerRow.setOrientation(LinearLayout.HORIZONTAL);
         centerRow.setGravity(Gravity.CENTER);
-        previousEpisodeBtn = iconButton("ic_skip_previous", 16);
+        previousEpisodeBtn = iconButton("previous", 16);
         previousEpisodeBtn.setOnClickListener(v -> playAdjacentEpisode(-1));
-        centerRow.addView(previousEpisodeBtn, new LinearLayout.LayoutParams(dp(52), dp(64)));
+        previousEpisodeBtn.setVisibility(View.GONE);
         centerRow.addView(skipCell("ic_replay", -10000), new LinearLayout.LayoutParams(dp(64), dp(64)));
-        playBtn = iconButton("ic_play", 20);
+        playBtn = iconButton("play", 20);
         playBtn.setOnClickListener(v -> togglePlay());
         LinearLayout.LayoutParams pp = new LinearLayout.LayoutParams(dp(88), dp(88));
         pp.leftMargin = dp(56);
         pp.rightMargin = dp(56);
         centerRow.addView(playBtn, pp);
         centerRow.addView(skipCell("ic_forward", 10000), new LinearLayout.LayoutParams(dp(64), dp(64)));
-        nextEpisodeBtn = iconButton("ic_skip_next", 16);
+        nextEpisodeBtn = iconButton("next", 16);
         nextEpisodeBtn.setOnClickListener(v -> playAdjacentEpisode(1));
-        centerRow.addView(nextEpisodeBtn, new LinearLayout.LayoutParams(dp(52), dp(64)));
+        nextEpisodeBtn.setVisibility(View.GONE);
         updateEpisodeControls();
         ui.addView(centerRow, new FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER));
 
@@ -440,11 +440,11 @@ public class PlayerActivity extends Activity {
         timeView.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout.LayoutParams timeLp = new LinearLayout.LayoutParams(0, dp(48), 1f);
         row.addView(timeView, timeLp);
-        volBtn = addIconControl(row, "◖))", "Volume", v -> toggleMute());
-        addIconControl(row, "♫", "Audio", v -> openSheet(0, 1));
-        addIconControl(row, "▣", "Quality / Server", v -> openSheet(0, 0));
-        addIconControl(row, "CC", "Subtitles", v -> openSheet(1, 0));
-        addIconControl(row, "⛶", "Fullscreen", v -> cycleFit());
+        volBtn = addIconControl(row, "vol", "Volume", v -> toggleMute());
+        addIconControl(row, "audio", "Audio", v -> openSheet(0, 1));
+        addIconControl(row, "quality", "Quality / Server", v -> openSheet(0, 0));
+        addIconControl(row, "cc", "Subtitles", v -> openSheet(1, 0));
+        addIconControl(row, "fit", "Fullscreen", v -> cycleFit());
         bottomBar.addView(row, new LinearLayout.LayoutParams(MATCH, dp(52)));
         ui.addView(bottomBar, new FrameLayout.LayoutParams(MATCH, WRAP, Gravity.BOTTOM));
 
@@ -500,21 +500,10 @@ public class PlayerActivity extends Activity {
         v.setBackground(stateBg(Color.TRANSPARENT));
     }
 
-    private TextView iconButton(String icon, int padDp) {
-        TextView v = new TextView(this);
-        String glyph = "•";
-        if (icon.contains("chevron")) glyph = "⌄";
-        else if (icon.contains("lock")) glyph = "▣";
-        else if (icon.contains("play")) glyph = "▶";
-        else if (icon.contains("pause")) glyph = "Ⅱ";
-        else if (icon.contains("previous")) glyph = "|◀";
-        else if (icon.contains("next")) glyph = "▶|";
-        v.setText(glyph);
-        v.setTextColor(Color.WHITE);
-        v.setTextSize(TypedValue.COMPLEX_UNIT_SP, icon.contains("play") ? 28 : 24);
-        v.setTypeface(Typeface.DEFAULT_BOLD);
-        v.setGravity(Gravity.CENTER);
-        v.setPadding(dp(padDp), dp(padDp), dp(padDp), dp(padDp));
+    private IconView iconButton(String icon, int padDp) {
+        IconView v = new IconView(icon);
+        int p = dp(padDp);
+        v.setPadding(p, p, p, p);
         makeFocusable(v);
         return v;
     }
@@ -544,14 +533,9 @@ public class PlayerActivity extends Activity {
         return v;
     }
 
-    private TextView addIconControl(LinearLayout row, String glyph, String description, View.OnClickListener listener) {
-        TextView v = new TextView(this);
-        v.setText(glyph);
+    private IconView addIconControl(LinearLayout row, String glyph, String description, View.OnClickListener listener) {
+        IconView v = new IconView(glyph);
         v.setContentDescription(description);
-        v.setTextColor(Color.WHITE);
-        v.setTextSize(TypedValue.COMPLEX_UNIT_SP, glyph.equals("CC") ? 18 : 25);
-        v.setTypeface(Typeface.DEFAULT_BOLD);
-        v.setGravity(Gravity.CENTER);
         makeFocusable(v);
         v.setOnClickListener(listener);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(58), dp(48));
@@ -562,11 +546,7 @@ public class PlayerActivity extends Activity {
 
     private FrameLayout skipCell(String icon, final long deltaMs) {
         FrameLayout f = new FrameLayout(this);
-        TextView glyph = new TextView(this);
-        glyph.setText(icon.contains("replay") ? "↶" : "↷");
-        glyph.setTextColor(Color.WHITE);
-        glyph.setTextSize(TypedValue.COMPLEX_UNIT_SP, 42);
-        glyph.setGravity(Gravity.CENTER);
+        IconView glyph = new IconView(icon.contains("replay") ? "replay" : "forward");
         f.addView(glyph, new FrameLayout.LayoutParams(MATCH, MATCH));
         TextView t = new TextView(this);
         t.setText("10");
@@ -622,7 +602,7 @@ public class PlayerActivity extends Activity {
 
     private void setLocked(boolean on) {
         locked = on;
-        lockBtn.setText(on ? "▣" : "▢");
+        lockBtn.setKind(on ? "lock" : "lockOpen");
         toast(on ? "Controls locked" : "Controls unlocked");
         controlsVisible = true;
         applyVisibility();
@@ -633,7 +613,7 @@ public class PlayerActivity extends Activity {
     private void toggleMute() {
         muted = !muted;
         if (player != null) player.setVolume(muted ? 0f : 1f);
-        volBtn.setText(muted ? "×" : "◖))");
+        volBtn.setKind(muted ? "volOff" : "vol");
     }
 
     private void cycleSpeed() {
@@ -697,6 +677,55 @@ public class PlayerActivity extends Activity {
     }
 
     /* ===================================================== seek bar ===================================================== */
+
+    /* Native vector icons ported from renderer/player.js SVG paths. */
+    private class IconView extends View {
+        private String kind;
+        private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        IconView(String kind) { super(PlayerActivity.this); this.kind = kind; setLayerType(View.LAYER_TYPE_SOFTWARE, null); }
+        void setKind(String value) { kind = value; invalidate(); }
+        private void path(Canvas c, float... xy) { Path q = new Path(); q.moveTo(xy[0],xy[1]); for(int i=2;i<xy.length;i+=2) q.lineTo(xy[i],xy[i+1]); c.drawPath(q,p); }
+        @Override protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            float side=Math.min(getWidth()-getPaddingLeft()-getPaddingRight(),getHeight()-getPaddingTop()-getPaddingBottom());
+            if(side<=0)return;
+            float s=side/24f;
+            canvas.save(); canvas.translate((getWidth()-side)/2f,(getHeight()-side)/2f); canvas.scale(s,s);
+            p.setColor(Color.WHITE); p.setStrokeWidth(2f); p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeJoin(Paint.Join.ROUND); p.setStyle(Paint.Style.STROKE);
+            if(kind.equals("down")) path(canvas,4,8,12,16,20,8);
+            else if(kind.equals("lock")||kind.equals("lockOpen")) {
+                canvas.drawRect(5,11,19,21,p); Path q=new Path();
+                if(kind.equals("lock")){q.moveTo(8,11);q.lineTo(8,7);q.cubicTo(8,2,16,2,16,7);q.lineTo(16,11);}
+                else {q.moveTo(8,11);q.lineTo(8,7);q.cubicTo(8,2,14,2,16,6);}
+                canvas.drawPath(q,p); p.setStyle(Paint.Style.FILL); canvas.drawCircle(12,15.5f,1.1f,p);
+            } else if(kind.equals("replay")||kind.equals("forward")) {
+                Path q=new Path();
+                if(kind.equals("replay")){q.moveTo(6.34f,7.34f);q.cubicTo(1,13,4,22,12,22);q.cubicTo(20,22,23,13,18,7);q.cubicTo(16,5,14,5,12,5);q.moveTo(12,1.5f);q.lineTo(8,5);q.lineTo(12,8.5f);}
+                else {q.moveTo(17.66f,7.34f);q.cubicTo(23,13,20,22,12,22);q.cubicTo(4,22,1,13,6,7);q.cubicTo(8,5,10,5,12,5);q.moveTo(12,1.5f);q.lineTo(16,5);q.lineTo(12,8.5f);}
+                canvas.drawPath(q,p);
+            } else if(kind.equals("play")) { p.setStyle(Paint.Style.FILL);path(canvas,7,4.5f,20,12,7,19.5f); }
+            else if(kind.equals("pause")) { p.setStyle(Paint.Style.FILL);canvas.drawRect(6.5f,4.5f,10.5f,19.5f,p);canvas.drawRect(13.5f,4.5f,17.5f,19.5f,p); }
+            else if(kind.equals("vol")||kind.equals("volOff")) {
+                p.setStyle(Paint.Style.FILL);path(canvas,3,9.5f,7,9.5f,12,5,12,19,7,14.5f,3,14.5f);p.setStyle(Paint.Style.STROKE);
+                if(kind.equals("vol")){canvas.drawArc(13.5f,7.5f,21,16.5f,-60,120,false,p);canvas.drawArc(12.5f,4.5f,23,19.5f,-60,120,false,p);}
+                else {path(canvas,16,9.5f,21,14.5f);path(canvas,21,9.5f,16,14.5f);}
+            } else if(kind.equals("audio")) {
+                path(canvas,9.5f,17.5f,9.5f,5.5f,19.5f,3.3f,19.5f,15.5f);
+                p.setStyle(Paint.Style.FILL);canvas.drawCircle(7,17.5f,2.5f,p);canvas.drawCircle(17,15.5f,2.5f,p);
+            } else if(kind.equals("quality")) {
+                canvas.drawRect(3,5,17,16,p);p.setStyle(Paint.Style.FILL);path(canvas,8,8,12.5f,10.5f,8,13);
+                p.setStyle(Paint.Style.STROKE);canvas.drawCircle(19,18,3,p);
+            } else if(kind.equals("cc")) {
+                p.setStyle(Paint.Style.FILL);canvas.drawRect(3,5,21,19,p);p.setColor(Color.BLACK);p.setStrokeWidth(1.7f);p.setStyle(Paint.Style.STROKE);
+                path(canvas,10.2f,10.3f,9,9.8f,7.5f,10.2f,7,12,7.5f,13.5f,9,14,10.2f,13.7f);
+                path(canvas,17.2f,10.3f,16,9.8f,14.5f,10.2f,14,12,14.5f,13.5f,16,14,17.2f,13.7f);
+            } else if(kind.equals("fit")) {
+                p.setStrokeWidth(2.2f);path(canvas,4,9,4,4,9,4);path(canvas,15,4,20,4,20,9);path(canvas,4,15,4,20,9,20);path(canvas,20,15,20,20,15,20);
+            } else if(kind.equals("previous")) { path(canvas,6,5,6,19);path(canvas,19,5,9,12,19,19); }
+            else if(kind.equals("next")) { path(canvas,18,5,18,19);path(canvas,5,5,15,12,5,19); }
+            canvas.restore();
+        }
+    }
 
     private class SeekView extends View {
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
