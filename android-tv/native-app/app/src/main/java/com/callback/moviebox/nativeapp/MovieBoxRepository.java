@@ -79,7 +79,7 @@ public final class MovieBoxRepository {
     int code=c.getResponseCode();InputStream in=code>=200&&code<300?c.getInputStream():c.getErrorStream();
     StringBuilder s=new StringBuilder();if(in!=null)try(BufferedReader r=new BufferedReader(new InputStreamReader(in,StandardCharsets.UTF_8))){String l;while((l=r.readLine())!=null)s.append(l);}
     c.disconnect();if(code<200||code>=300)throw new IOException("MovieBox HTTP "+code+" "+s);
-    JSONObject j=new JSONObject(s.toString());if(j.has("code")&&j.optInt("code")!=0)throw new IOException("MovieBox API "+j.optString("reason,"")+" "+j.optString("message","API error"));
+    JSONObject j=new JSONObject(s.toString());if(j.has("code")&&j.optInt("code")!=0)throw new IOException("MovieBox API "+j.optString("reason")+" "+j.optString("message","API error"));
     return j;
   }
 }
