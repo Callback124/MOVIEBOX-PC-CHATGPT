@@ -14,7 +14,8 @@ public class ExoPlayerPlugin extends Plugin {
     @PluginMethod
     public void play(PluginCall call) {
         String url = call.getString("url");
-        if (url == null || url.trim().isEmpty()) {
+        boolean movieBox = call.getBoolean("movieBox", false);
+        if ((url == null || url.trim().isEmpty()) && !movieBox) {
             call.reject("url required");
             return;
         }
@@ -26,6 +27,14 @@ public class ExoPlayerPlugin extends Plugin {
         if (headers != null) intent.putExtra("headers", headers.toString());
         JSArray sources = call.getArray("sources");
         if (sources != null) intent.putExtra("sources", sources.toString());
+        intent.putExtra("movieBox", movieBox);
+        intent.putExtra("subjectId", call.getString("subjectId", ""));
+        intent.putExtra("season", call.getInt("season", 0));
+        intent.putExtra("episode", call.getInt("episode", 0));
+        intent.putExtra("detailPath", call.getString("detailPath", ""));
+        intent.putExtra("token", call.getString("token", ""));
+        JSArray dubs = call.getArray("dubs");
+        if (dubs != null) intent.putExtra("dubs", dubs.toString());
         Double pos = call.getDouble("position", 0.0);
         intent.putExtra("pos", (long) ((pos == null ? 0.0 : pos) * 1000));
         getActivity().runOnUiThread(() -> {
