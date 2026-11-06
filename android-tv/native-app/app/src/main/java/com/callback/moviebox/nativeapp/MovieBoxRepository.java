@@ -17,13 +17,15 @@ public final class MovieBoxRepository {
 
   // Every token-protected operation obtains a new session from /home first.
   public JSONObject home() throws Exception {
+    prefs.edit().remove("token").apply(); // never fall back to a previously cached session
     Exception last=null;
     for(String b:BASES) try {
       HttpURLConnection c=connect(b+"home","GET",null,"");
       String t=c.getHeaderField("x-user");
       JSONObject j=read(c);
       if(t==null||t.isEmpty())t=j.optString("token","");
-      if(t!=null&&!t.isEmpty())saveToken(t);
+      if(t==null||t.trim().isEmpty())throw new IOException("Fresh MovieBox token missing from /home x-user header");
+      saveToken(t);
       return j;
     } catch(Exception e){last=e;}
     throw last==null?new IOException("MovieBox Home unavailable"):last;
