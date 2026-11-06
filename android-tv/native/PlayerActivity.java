@@ -1012,7 +1012,12 @@ public class PlayerActivity extends Activity {
             for (int i = 0; i < arr.length(); i++) collectMovieBoxSources(arr.opt(i), key, context, inherited, out);
         } else if (value instanceof JSONObject) {
             JSONObject obj = (JSONObject) value;
-            JSONObject meta = new JSONObject(inherited.toString());
+            JSONObject meta = new JSONObject();
+            java.util.Iterator<String> inheritedKeys = inherited.keys();
+            while (inheritedKeys.hasNext()) {
+                String inheritedKey = inheritedKeys.next();
+                try { meta.put(inheritedKey, inherited.opt(inheritedKey)); } catch (Exception ignored) { }
+            }
             for (String k : new String[]{"resolution","quality","label","name","definition","height","format","mimeType","mime","protocol","type"}) {
                 if (obj.has(k)) try { meta.put(k, obj.opt(k)); } catch (Exception ignored) { }
             }
