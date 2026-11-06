@@ -438,11 +438,12 @@ public class PlayerActivity extends Activity {
         timeView.setText("00:00 · 00:00");
         timeView.setShadowLayer(3f, 0f, 1f, Color.BLACK);
         row.addView(timeView, new LinearLayout.LayoutParams(0, WRAP, 1f));
-        volBtn = addButton(row, "ic_volume", v -> toggleMute());
-        addButton(row, "ic_audio", v -> openSheet(0, 1));
-        addButton(row, "ic_quality", v -> openSheet(0, 0));
-        addButton(row, "ic_cc", v -> openSheet(1, 0));
-        addButton(row, "ic_fit", v -> cycleFit());
+        volBtn = addButton(row, "ic_volume", "Volume", v -> toggleMute());
+        addButton(row, "ic_audio", "Audio", v -> openSheet(0, 1));
+        addButton(row, "ic_quality", "Quality", v -> openSheet(0, 0));
+        addButton(row, "ic_cc", "Subtitles", v -> openSheet(1, 0));
+        addButton(row, "ic_fit", "Aspect", v -> cycleFit());
+        addButton(row, "ic_speed", "Speed", v -> cycleSpeed());
         bottomBar.addView(row, new LinearLayout.LayoutParams(MATCH, WRAP));
         ui.addView(bottomBar, new FrameLayout.LayoutParams(MATCH, WRAP, Gravity.BOTTOM));
 
@@ -508,10 +509,28 @@ public class PlayerActivity extends Activity {
         return v;
     }
 
-    private ImageView addButton(LinearLayout row, String icon, View.OnClickListener l) {
-        ImageView v = iconButton(icon, 9);
-        v.setOnClickListener(l);
-        row.addView(v, new LinearLayout.LayoutParams(dp(46), dp(46)));
+    private ImageView addButton(LinearLayout row, String icon, String label, View.OnClickListener l) {
+        LinearLayout item = new LinearLayout(this);
+        item.setOrientation(LinearLayout.VERTICAL);
+        item.setGravity(Gravity.CENTER);
+        item.setPadding(dp(3), dp(2), dp(3), dp(2));
+        makeFocusable(item);
+
+        ImageView v = new ImageView(this);
+        v.setImageResource(drawableId(icon));
+        v.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        item.addView(v, new LinearLayout.LayoutParams(dp(30), dp(30)));
+
+        TextView caption = new TextView(this);
+        caption.setText(label);
+        caption.setTextColor(Color.WHITE);
+        caption.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
+        caption.setGravity(Gravity.CENTER);
+        caption.setSingleLine(true);
+        item.addView(caption, new LinearLayout.LayoutParams(MATCH, WRAP));
+
+        item.setOnClickListener(l);
+        row.addView(item, new LinearLayout.LayoutParams(dp(76), dp(62)));
         return v;
     }
 
@@ -571,7 +590,7 @@ public class PlayerActivity extends Activity {
 
     private void scheduleHide() {
         handler.removeCallbacks(hider);
-        handler.postDelayed(hider, 4000);
+        handler.postDelayed(hider, 10000);
     }
 
     private void setLocked(boolean on) {
