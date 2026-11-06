@@ -438,12 +438,16 @@ public class PlayerActivity extends Activity {
         timeView.setText("00:00 · 00:00");
         timeView.setShadowLayer(3f, 0f, 1f, Color.BLACK);
         row.addView(timeView, new LinearLayout.LayoutParams(0, WRAP, 1f));
-        volBtn = addButton(row, "ic_volume", v -> toggleMute());
-        addButton(row, "ic_audio", v -> openSheet(0, 1));
-        addButton(row, "ic_quality", v -> openSheet(0, 0));
-        addButton(row, "ic_cc", v -> openSheet(1, 0));
-        addButton(row, "ic_fit", v -> cycleFit());
-        bottomBar.addView(row, new LinearLayout.LayoutParams(MATCH, WRAP));
+        timeView.setGravity(Gravity.CENTER_VERTICAL);
+        row.addView(timeView, new LinearLayout.LayoutParams(dp(112), dp(48)));
+        volBtn = addTextControl(row, "VOL", v -> toggleMute());
+        addTextControl(row, "AUDIO", v -> openSheet(0, 1));
+        addTextControl(row, "QUALITY", v -> openSheet(0, 0));
+        addTextControl(row, "SUB", v -> openSheet(1, 0));
+        addTextControl(row, "FIT", v -> cycleFit());
+        addTextControl(row, "SPEED", v -> cycleSpeed());
+        addTextControl(row, "PIP", v -> enterPip());
+        bottomBar.addView(row, new LinearLayout.LayoutParams(MATCH, dp(52)));
         ui.addView(bottomBar, new FrameLayout.LayoutParams(MATCH, WRAP, Gravity.BOTTOM));
 
         // ---- track sheet (right side panel)
@@ -515,6 +519,24 @@ public class PlayerActivity extends Activity {
         return v;
     }
 
+    private TextView addTextControl(LinearLayout row, String label, View.OnClickListener listener) {
+        TextView v = new TextView(this);
+        v.setText(label);
+        v.setTextColor(Color.WHITE);
+        v.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        v.setTypeface(Typeface.DEFAULT_BOLD);
+        v.setGravity(Gravity.CENTER);
+        v.setSingleLine(true);
+        v.setPadding(dp(2), 0, dp(2), 0);
+        makeFocusable(v);
+        v.setOnClickListener(listener);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(46), 1f);
+        lp.leftMargin = dp(2);
+        lp.rightMargin = dp(2);
+        row.addView(v, lp);
+        return v;
+    }
+
     private FrameLayout skipCell(String icon, final long deltaMs) {
         FrameLayout f = new FrameLayout(this);
         ImageView iv = new ImageView(this);
@@ -571,7 +593,7 @@ public class PlayerActivity extends Activity {
 
     private void scheduleHide() {
         handler.removeCallbacks(hider);
-        handler.postDelayed(hider, 4000);
+        handler.postDelayed(hider, 7000);
     }
 
     private void setLocked(boolean on) {
