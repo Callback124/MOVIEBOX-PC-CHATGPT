@@ -997,12 +997,20 @@ async function route() {
 window.addEventListener('scroll', () => document.querySelector('.topbar').classList.toggle('solid', window.scrollY > 10), { passive: true });
 window.addEventListener('hashchange', () => {
   const nextHash = location.hash || '#/home';
-  // Leaving a search-results route with Back should return straight to Home,
-  // not to the empty search launcher.
-  if (nextHash === '#/search' && lastRouteHash.startsWith('#/search/')) {
-    history.replaceState(null, '', '#/home');
-  }
+  if (nextHash === '#/search' && lastRouteHash.startsWith('#/search/')) history.replaceState(null, '', '#/home');
   lastRouteHash = location.hash || '#/home';
   route();
+});
+window.MB_handleBack = function () {
+  if (window.MB_closePlayerForBack && window.MB_closePlayerForBack()) return true;
+  if (modalPushed) { closeModal(); return true; }
+  const current = location.hash || '#/home';
+  if (current !== '#/home' && current !== '#/') { history.back(); return true; }
+  return false;
+};
+document.addEventListener('keydown', (event) => {
+  if (['Escape','GoBack','BrowserBack'].includes(event.key) && window.MB_handleBack()) {
+    event.preventDefault(); event.stopPropagation();
+  }
 });
 route();
