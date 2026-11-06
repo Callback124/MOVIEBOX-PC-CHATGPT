@@ -387,3 +387,24 @@ html{scroll-padding-top:90px;scroll-padding-bottom:60px}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important}}
 /* Clear, responsive remote focus without waiting for hover animation. */
 button:focus-visible,a:focus-visible,.card:focus-visible,.ep:focus-within{outline:2px solid #fff;outline-offset:2px}
+
+/* Simplified MovieBox header: no category tabs; search occupies the header row. */
+.topbar{gap:22px}
+.topbar .tabs{display:none!important}
+.header-search{flex:1;min-width:0;max-width:760px;margin-left:auto}
+.header-search .searchbar{padding:0}
+.header-search .searchbar input{height:44px;background:#181818;border-color:#ffffff25}
+.topbar.search-mode .brand,.topbar.search-mode .actions{display:none!important}
+.topbar.search-mode{background:#141414}
+.header-search .sugg{left:0;right:0;top:calc(100% + 8px);box-shadow:0 12px 30px #000a}
+.header-search .sugg a{padding:13px 16px}
+.header-search .sugg small{display:none}
+.server-list{display:flex;flex-direction:column;gap:9px;margin-top:14px}
+.server-option{display:flex;align-items:center;gap:12px;width:100%;padding:13px 14px;text-align:left;border:1px solid #343434;border-radius:9px;background:#222;color:#fff}
+.server-option.selected{border-color:#e50914;background:#2b191a}
+.server-option:disabled{opacity:.52;cursor:default}
+.server-mark{font-size:22px;width:28px;text-align:center;color:#e50914}
+.server-copy{display:flex;flex-direction:column;gap:2px;flex:1}
+.server-copy small{font-size:12px;color:#aaa}
+.server-check{font-weight:800;color:#e50914}
+@media(max-width:700px){.topbar{padding:0 4%;gap:12px}.header-search{max-width:none}.topbar.search-mode{height:64px}}
