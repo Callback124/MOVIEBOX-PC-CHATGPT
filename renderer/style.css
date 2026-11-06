@@ -379,3 +379,11 @@ html{scroll-padding-top:90px;scroll-padding-bottom:60px}
   outline-offset:2px!important;
   box-shadow:0 8px 24px rgba(0,0,0,.55)!important;
 }
+
+/* Android TV performance: avoid off-screen row layout/paint and expensive focus animations. */
+.row{content-visibility:auto;contain-intrinsic-size:auto 420px}
+.poster img,.tp img,.still img{backface-visibility:hidden}
+.card.pos,.card.top10,.card.wide,.poster img,.slide,.row-head a,.arrow{transition:none!important}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important}}
+/* Clear, responsive remote focus without waiting for hover animation. */
+button:focus-visible,a:focus-visible,.card:focus-visible,.ep:focus-within{outline:2px solid #fff;outline-offset:2px}
