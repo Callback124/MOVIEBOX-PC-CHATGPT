@@ -106,8 +106,8 @@ public class MainActivity extends Activity {
    String hero=pick(subject,"stills","coverHorizontal","horizontalCover","backdrop","backdropUrl","banner","image");
    if(hero.isEmpty())hero=cover;
    String yr=year(subject),rating=subject.optString("imdbRatingValue",""),duration=subject.optString("duration","");
-   JSONArray seasons=resource.optJSONArray("seasons");if(seasons==null)seasons=new JSONArray();
-   JSONArray dubs=subject.optJSONArray("dubs");if(dubs==null)dubs=new JSONArray();
+   final JSONArray seasons=resource.optJSONArray("seasons")!=null?resource.optJSONArray("seasons"):new JSONArray();
+   final JSONArray dubs=subject.optJSONArray("dubs")!=null?subject.optJSONArray("dubs"):new JSONArray();
    JSONArray stars=data.optJSONArray("stars");if(stars==null)stars=new JSONArray();
    String synopsis=description(subject);
    // Web-app style cinematic backdrop and poster/info composition.
