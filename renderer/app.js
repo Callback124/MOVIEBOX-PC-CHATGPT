@@ -972,6 +972,7 @@ async function musicView(q) {
 }
 
 /* ---------- router ---------- */
+let lastRouteHash = location.hash || '#/home';
 function setTab(name) {
   document.querySelectorAll('#tabs a').forEach((a) => a.classList.toggle('active', a.dataset.tab === name));
 }
@@ -994,5 +995,14 @@ async function route() {
   } catch (e) { showError(e); }
 }
 window.addEventListener('scroll', () => document.querySelector('.topbar').classList.toggle('solid', window.scrollY > 10), { passive: true });
-window.addEventListener('hashchange', route);
+window.addEventListener('hashchange', () => {
+  const nextHash = location.hash || '#/home';
+  // Leaving a search-results route with Back should return straight to Home,
+  // not to the empty search launcher.
+  if (nextHash === '#/search' && lastRouteHash.startsWith('#/search/')) {
+    history.replaceState(null, '', '#/home');
+  }
+  lastRouteHash = location.hash || '#/home';
+  route();
+});
 route();
