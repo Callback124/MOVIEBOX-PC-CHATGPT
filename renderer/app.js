@@ -450,11 +450,11 @@ async function playMovieBoxEpisode(subjectId, se, ep, title, detailPath = '') {
       'x-request-lang': 'en'
     };
     if (status) { status.style.display = 'block'; status.textContent = 'Opening ExoPlayer… Resources will load inside the player.'; }
+    const episodeSequence = Array.isArray(window.__mbEpisodeSequence) ? window.__mbEpisodeSequence : [];
     await window.MB_play({
       src: '', format: '', title, headers,
       movieBox: true, subjectId: String(subjectId), season: Number(se), episode: Number(ep),
-      detailPath: String(detailPath || ''), token,
-      dubs
+      detailPath: String(detailPath || ''), token, dubs, episodeSequence
     });
   } catch (error) {
     if (status) { status.style.display = 'block'; status.textContent = 'Player launch error: ' + (error?.message || error); }
@@ -537,6 +537,7 @@ async function movieBoxDetailView(id) {
     episodesBox.innerHTML = '<div class="section-head"><h3>Episodes</h3><select class="sel" id="mb-season">' +
       seasonList.map((s) => '<option value="' + Number(s.se) + '">Season ' + Number(s.se) + ' · ' + Number(s.maxEp || 0) + ' Episodes</option>').join('') +
       '</select></div><div class="eps" id="mb-episode-list"></div>';
+    window.__mbEpisodeSequence = seasonList.flatMap((season) => Array.from({length: Math.max(0, Math.min(500, Number(season.maxEp || 0)))}, (_, i) => ({se:Number(season.se),ep:i+1})));
     const renderEpisodes = (seasonNo) => {
       const season = seasonList.find((s) => Number(s.se) === Number(seasonNo));
       const list = $('#mb-episode-list', episodesBox); list.innerHTML = '';
