@@ -107,6 +107,7 @@ public class PlayerActivity extends Activity {
     private ImageView previousEpisodeBtn;
     private ImageView nextEpisodeBtn;
     private String basePlayerTitle = "";
+    private String originalPlayerTitle = "";
     private String movieBoxSubjectId = "";
     private String movieBoxDetailPath = "";
     private String movieBoxToken = "";
@@ -274,6 +275,7 @@ public class PlayerActivity extends Activity {
         movieBoxEpisode = getIntent().getIntExtra("episode", 0);
         String title = getIntent().getStringExtra("title");
         basePlayerTitle = title == null ? "" : title;
+        originalPlayerTitle = basePlayerTitle;
         updateEpisodeSubtitle();
         String format = getIntent().getStringExtra("format");
         long pos = getIntent().getLongExtra("pos", 0L);
