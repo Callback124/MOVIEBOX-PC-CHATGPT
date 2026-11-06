@@ -955,7 +955,7 @@ public class PlayerActivity extends Activity {
             if (sourceUrl.isEmpty()) continue;
             final String format = source.optString("format", "");
             final String quality = source.optString("quality", "Quality unknown");
-            final String label = quality + " • " + format.toUpperCase(Locale.ROOT);
+            final String label = quality;
             out.add(new Opt(label, sourceUrl.equals(activeSourceUrl), () -> switchSource(source)));
         }
         return out;
@@ -1126,6 +1126,10 @@ public class PlayerActivity extends Activity {
             out.add(new Opt(name, selected, () -> {
                 movieBoxSubjectId = id;
                 movieBoxDetailPath = dub.optString("detailPath", "");
+                if (!originalPlayerTitle.endsWith(" · " + name)) {
+                    basePlayerTitle = originalPlayerTitle + " · " + name;
+                }
+                titleView.setText(basePlayerTitle);
                 fetchMovieBoxResources(movieBoxSubjectId, movieBoxDetailPath, movieBoxSeason, movieBoxEpisode, true);
                 toast("Loading " + name + " resources…");
             }));
