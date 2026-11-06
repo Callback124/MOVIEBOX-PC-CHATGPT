@@ -4,7 +4,7 @@ on:
   push:
     branches: [ moviebox-tmdb ]
     paths:
-      - 'android-tv/native-app/**'
+      - 'android-tv/**'
       - '.github/workflows/native-tv.yml'
 permissions:
   contents: read
