@@ -7,6 +7,7 @@ import android.content.res.Configuration;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -104,8 +105,8 @@ public class PlayerActivity extends Activity {
     private JSONArray dubVariants = new JSONArray();
     private JSONArray episodeSequence = new JSONArray();
     private TextView episodeSubtitleView;
-    private TextView previousEpisodeBtn;
-    private TextView nextEpisodeBtn;
+    private IconView previousEpisodeBtn;
+    private IconView nextEpisodeBtn;
     private String basePlayerTitle = "";
     private String originalPlayerTitle = "";
     private String movieBoxSubjectId = "";
