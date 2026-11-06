@@ -59,6 +59,12 @@ import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.PlayerView;
 
 import java.util.ArrayList;
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLEncoder;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -95,6 +101,14 @@ public class PlayerActivity extends Activity {
     private LinearLayout sheet;
     private JSONArray sourceVariants = new JSONArray();
     private String activeSourceUrl = "";
+    private JSONArray dubVariants = new JSONArray();
+    private String movieBoxSubjectId = "";
+    private String movieBoxDetailPath = "";
+    private String movieBoxToken = "";
+    private int movieBoxSeason = 0;
+    private int movieBoxEpisode = 0;
+    private boolean movieBoxMode = false;
+    private boolean resourcesLoading = false;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private boolean locked = false;
@@ -245,25 +259,37 @@ public class PlayerActivity extends Activity {
         String url = getIntent().getStringExtra("url");
         activeSourceUrl = url == null ? "" : url;
         try { sourceVariants = new JSONArray(getIntent().getStringExtra("sources") == null ? "[]" : getIntent().getStringExtra("sources")); } catch (Exception ignored) { sourceVariants = new JSONArray(); }
+        try { dubVariants = new JSONArray(getIntent().getStringExtra("dubs") == null ? "[]" : getIntent().getStringExtra("dubs")); } catch (Exception ignored) { dubVariants = new JSONArray(); }
+        movieBoxMode = getIntent().getBooleanExtra("movieBox", false);
+        movieBoxSubjectId = getIntent().getStringExtra("subjectId");
+        movieBoxDetailPath = getIntent().getStringExtra("detailPath");
+        movieBoxToken = getIntent().getStringExtra("token");
+        movieBoxSeason = getIntent().getIntExtra("season", 0);
+        movieBoxEpisode = getIntent().getIntExtra("episode", 0);
         String title = getIntent().getStringExtra("title");
         String format = getIntent().getStringExtra("format");
         long pos = getIntent().getLongExtra("pos", 0L);
         titleView.setText(title == null ? "" : title);
-        MediaItem.Builder mediaItemBuilder = new MediaItem.Builder()
-                .setUri(Uri.parse(url))
-                .setMediaMetadata(new MediaMetadata.Builder().setTitle(title).build());
-        // Signed CDN URLs may not expose a recognizable extension; use the API's format hint.
-        if (format != null) {
-            String f = format.toUpperCase(Locale.ROOT);
-            if (f.contains("HLS") || f.contains("M3U8")) mediaItemBuilder.setMimeType("application/x-mpegURL");
-            else if (f.contains("DASH") || f.contains("MPD")) mediaItemBuilder.setMimeType("application/dash+xml");
-            else if (f.contains("MP4")) mediaItemBuilder.setMimeType("video/mp4");
+        if (url != null && !url.trim().isEmpty()) {
+            MediaItem.Builder mediaItemBuilder = new MediaItem.Builder()
+                    .setUri(Uri.parse(url))
+                    .setMediaMetadata(new MediaMetadata.Builder().setTitle(title).build());
+            if (format != null) {
+                String f = format.toUpperCase(Locale.ROOT);
+                if (f.contains("HLS") || f.contains("M3U8")) mediaItemBuilder.setMimeType("application/x-mpegURL");
+                else if (f.contains("DASH") || f.contains("MPD")) mediaItemBuilder.setMimeType("application/dash+xml");
+                else if (f.contains("MP4")) mediaItemBuilder.setMimeType("video/mp4");
+            }
+            player.setMediaItem(mediaItemBuilder.build());
+            player.prepare();
+            if (pos > 0) player.seekTo(pos);
+            player.setPlayWhenReady(true);
+        } else if (movieBoxMode) {
+            titleView.setText((title == null ? "" : title) + "  •  Loading resources…");
+            fetchMovieBoxResources(movieBoxSubjectId, movieBoxDetailPath, movieBoxSeason, movieBoxEpisode, false);
+        } else {
+            toast("No video URL was supplied");
         }
-        MediaItem item = mediaItemBuilder.build();
-        player.setMediaItem(item);
-        player.prepare();
-        if (pos > 0) player.seekTo(pos);
-        player.setPlayWhenReady(true);
         updatePlayIcon();
         showControls();
     }
@@ -760,7 +786,7 @@ public class PlayerActivity extends Activity {
         tabs.setOrientation(LinearLayout.HORIZONTAL);
         tabs.setBackgroundColor(0x1AFFFFFF);
         tabs.setPadding(dp(6), dp(6), dp(6), dp(6));
-        String[] names = sheetMode == 1 ? new String[]{"Subtitles"} : new String[]{"Video", "Audio"};
+        String[] names = sheetMode == 1 ? new String[]{"Subtitles"} : (dubVariants.length() > 1 ? new String[]{"Resources", "Audio", "Dub"} : new String[]{"Resources", "Audio"});
         int active = sheetMode == 1 ? 0 : sheetTab;
         for (int i = 0; i < names.length; i++) {
             final int idx = i;
@@ -796,7 +822,7 @@ public class PlayerActivity extends Activity {
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
         sv.addView(list, new ViewGroup.LayoutParams(MATCH, WRAP));
-        List<Opt> opts = sheetMode == 1 ? subtitleOpts() : (sheetTab == 0 ? videoOpts() : audioOpts());
+        List<Opt> opts = sheetMode == 1 ? subtitleOpts() : (sheetTab == 0 ? videoOpts() : (sheetTab == 1 ? audioOpts() : dubOpts()));
         View selected = null;
         for (int i = 0; i < opts.size(); i++) {
             View r = optRow(opts.get(i), i);
@@ -901,7 +927,7 @@ public class PlayerActivity extends Activity {
             boolean on = refs.size() == 1 || (videoForced && r.group.isTrackSelected(r.index));
             out.add(new Opt(videoLabel(r.format), on, () -> selectTrack(r)));
         }
-        if (refs.isEmpty()) out.add(new Opt("No adaptive video tracks", false, () -> { }));
+        if (refs.isEmpty() && sourceVariants.length() == 0) out.add(new Opt(resourcesLoading ? "Loading MovieBox resources…" : "No video tracks", false, () -> { }));
         for (int i = 0; i < sourceVariants.length(); i++) {
             final JSONObject source = sourceVariants.optJSONObject(i);
             if (source == null) continue;
@@ -910,8 +936,151 @@ public class PlayerActivity extends Activity {
             final String format = source.optString("format", "");
             final String quality = source.optString("quality", "Quality unknown");
             final String label = quality + " • " + format.toUpperCase(Locale.ROOT);
-            out.add(new Opt("Source: " + label, sourceUrl.equals(activeSourceUrl), () -> switchSource(source)));
+            out.add(new Opt(label, sourceUrl.equals(activeSourceUrl), () -> switchSource(source)));
         }
+        return out;
+    }
+
+    private void fetchMovieBoxResources(String subjectId, String detailPath, int season, int episode, boolean preservePosition) {
+        if (resourcesLoading) return;
+        resourcesLoading = true;
+        final long resumeAt = preservePosition && player != null ? Math.max(0, player.getCurrentPosition()) : 0L;
+        new Thread(() -> {
+            Exception last = null;
+            String[] bases = new String[]{"https://movieboxph.org/wefeed-h5api-bff/", "https://h5-api.aoneroom.com/wefeed-h5api-bff/"};
+            for (String base : bases) {
+                HttpURLConnection connection = null;
+                try {
+                    String query = "subject/play?subjectId=" + URLEncoder.encode(subjectId, "UTF-8")
+                            + "&se=" + Math.max(0, season) + "&ep=" + Math.max(0, episode);
+                    if (detailPath != null && !detailPath.isEmpty()) query += "&detailPath=" + URLEncoder.encode(detailPath, "UTF-8");
+                    connection = (HttpURLConnection) new URL(base + query).openConnection();
+                    connection.setRequestMethod("GET");
+                    connection.setConnectTimeout(15000);
+                    connection.setReadTimeout(25000);
+                    connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36");
+                    connection.setRequestProperty("Accept", "*/*");
+                    connection.setRequestProperty("Origin", "https://movieboxph.org");
+                    String path = detailPath == null ? "" : detailPath.trim();
+                    String referer = path.isEmpty() ? "https://movieboxph.org/" : (path.startsWith("http") ? path : "https://movieboxph.org/play/" + (path.startsWith("/") ? path.substring(1) : path));
+                    connection.setRequestProperty("Referer", referer);
+                    connection.setRequestProperty("x-client-info", "{\"timezone\":\"Asia/Calcutta\"}");
+                    connection.setRequestProperty("x-request-lang", "en");
+                    if (movieBoxToken != null && !movieBoxToken.isEmpty()) {
+                        String clean = movieBoxToken.replaceFirst("(?i)^Bearer\\s+", "");
+                        connection.setRequestProperty("Authorization", "Bearer " + clean);
+                        connection.setRequestProperty("x-user", clean);
+                    }
+                    InputStream input = connection.getResponseCode() >= 400 ? connection.getErrorStream() : connection.getInputStream();
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(input, "UTF-8"));
+                    StringBuilder body = new StringBuilder(); String line;
+                    while ((line = reader.readLine()) != null) body.append(line);
+                    reader.close();
+                    JSONObject payload = new JSONObject(body.toString());
+                    JSONObject data = payload.optJSONObject("data");
+                    if (data == null) data = payload;
+                    JSONArray found = new JSONArray();
+                    collectMovieBoxSources(data, "data", false, new JSONObject(), found);
+                    if (found.length() == 0) throw new Exception(payload.optString("message", "No playable resources returned"));
+                    JSONObject first = found.getJSONObject(0);
+                    runOnUiThread(() -> {
+                        sourceVariants = found;
+                        activeSourceUrl = first.optString("url", "");
+                        titleView.setText(getIntent().getStringExtra("title") + "  •  " + first.optString("quality", "Auto"));
+                        playSource(first, resumeAt);
+                        if (sheetOpen) renderSheet(false);
+                    });
+                    last = null;
+                    break;
+                } catch (Exception e) { last = e; }
+                finally { if (connection != null) connection.disconnect(); }
+            }
+            final Exception error = last;
+            runOnUiThread(() -> {
+                resourcesLoading = false;
+                if (error != null) toast("Resource loading failed: " + error.getMessage());
+                else if (sheetOpen) renderSheet(false);
+            });
+        }).start();
+    }
+
+    private void collectMovieBoxSources(Object value, String key, boolean inStream, JSONObject inherited, JSONArray out) {
+        if (value == null || value == JSONObject.NULL) return;
+        boolean context = inStream || key.matches("(?i)streams?|hls|dash|play|playback|video|videos|source|sources|quality|qualities|file|files|media|download");
+        if (value instanceof JSONArray) {
+            JSONArray arr = (JSONArray) value;
+            for (int i = 0; i < arr.length(); i++) collectMovieBoxSources(arr.opt(i), key, context, inherited, out);
+        } else if (value instanceof JSONObject) {
+            JSONObject obj = (JSONObject) value;
+            JSONObject meta = new JSONObject(inherited.toString());
+            for (String k : new String[]{"resolution","quality","label","name","definition","height","format","mimeType","mime","protocol","type"}) {
+                if (obj.has(k)) try { meta.put(k, obj.opt(k)); } catch (Exception ignored) { }
+            }
+            String url = "";
+            for (String k : new String[]{"url","src","playUrl","streamUrl","fileUrl","uri","videoUrl","mediaUrl","downloadUrl","masterUrl"}) {
+                String candidate = obj.optString(k, "");
+                if (candidate.startsWith("http")) { url = candidate; break; }
+            }
+            if (!url.isEmpty() && context) addMovieBoxSource(url, key, meta, out);
+            java.util.Iterator<String> it = obj.keys();
+            while (it.hasNext()) { String child = it.next(); collectMovieBoxSources(obj.opt(child), child, context, meta, out); }
+        } else if (value instanceof String) {
+            String url = (String) value;
+            if (url.startsWith("http") && (context || url.matches("(?i).*\\.(m3u8|mpd|mp4|m4v|webm)(\\?.*)?$"))) addMovieBoxSource(url, key, inherited, out);
+        }
+    }
+
+    private void addMovieBoxSource(String url, String key, JSONObject meta, JSONArray out) {
+        for (int i = 0; i < out.length(); i++) if (url.equals(out.optJSONObject(i).optString("url"))) return;
+        String format = meta.optString("format", meta.optString("mimeType", meta.optString("protocol", key)));
+        String lower = (key + " " + format + " " + url).toLowerCase(Locale.ROOT);
+        if (lower.contains("m3u8") || lower.contains("hls")) format = "HLS";
+        else if (lower.contains("mpd") || lower.contains("dash")) format = "DASH";
+        else if (lower.contains("mp4")) format = "MP4";
+        String quality = meta.optString("resolution", meta.optString("quality", meta.optString("label", meta.optString("name", ""))));
+        if (quality.isEmpty()) {
+            int height = meta.optInt("height", 0);
+            if (height > 0) quality = height + "p";
+            else {
+                java.util.regex.Matcher m = java.util.regex.Pattern.compile("(2160|1440|1080|720|576|540|480|360)\\s*p?", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(meta.toString() + " " + url);
+                quality = m.find() ? m.group(1) + "p" : "Quality unknown";
+            }
+        }
+        try { JSONObject item = new JSONObject(); item.put("url", url); item.put("format", format); item.put("quality", quality); out.put(item); } catch (Exception ignored) { }
+    }
+
+    private void playSource(JSONObject source, long position) {
+        String url = source.optString("url", "");
+        if (url.isEmpty() || player == null) return;
+        String format = source.optString("format", "").toUpperCase(Locale.ROOT);
+        MediaItem.Builder b = new MediaItem.Builder().setUri(Uri.parse(url));
+        if (format.contains("HLS")) b.setMimeType("application/x-mpegURL");
+        else if (format.contains("DASH")) b.setMimeType("application/dash+xml");
+        else if (format.contains("MP4")) b.setMimeType("video/mp4");
+        activeSourceUrl = url;
+        player.setMediaItem(b.build());
+        player.prepare();
+        if (position > 0) player.seekTo(position);
+        player.setPlayWhenReady(true);
+    }
+
+    private List<Opt> dubOpts() {
+        List<Opt> out = new ArrayList<>();
+        for (int i = 0; i < dubVariants.length(); i++) {
+            JSONObject dub = dubVariants.optJSONObject(i);
+            if (dub == null) continue;
+            String id = dub.optString("subjectId", "");
+            if (id.isEmpty()) continue;
+            String name = dub.optString("lanName", dub.optString("lanCode", "Audio"));
+            boolean selected = id.equals(movieBoxSubjectId);
+            out.add(new Opt(name, selected, () -> {
+                movieBoxSubjectId = id;
+                movieBoxDetailPath = dub.optString("detailPath", "");
+                fetchMovieBoxResources(movieBoxSubjectId, movieBoxDetailPath, movieBoxSeason, movieBoxEpisode, true);
+                toast("Loading " + name + " resources…");
+            }));
+        }
+        if (out.isEmpty()) out.add(new Opt("No dubbed languages available", false, () -> { }));
         return out;
     }
 
