@@ -30,13 +30,15 @@ public class MainActivity extends Activity {
  private GradientDrawable bg(int color,int stroke){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(3));if(stroke!=0)d.setStroke(dp(2),stroke);return d;}
  private TextView txt(String s,int size,int color,boolean bold){TextView t=new TextView(this);t.setText(s);t.setTextSize(size);t.setTextColor(color);if(bold)t.setTypeface(android.graphics.Typeface.DEFAULT,android.graphics.Typeface.BOLD);return t;}
  private void buildShell(){
-  root=new LinearLayout(this);root.setOrientation(1);root.setBackgroundColor(BG);setContentView(root);
-  top=new LinearLayout(this);top.setGravity(Gravity.CENTER_VERTICAL);top.setPadding(dp(42),dp(8),dp(42),dp(8));top.setBackgroundColor(0xee141414);root.addView(top,new LinearLayout.LayoutParams(-1,dp(66)));
+  root=new FrameLayout(this);root.setBackgroundColor(BG);setContentView(root);
+  pageScroll=new ScrollView(this);pageScroll.setFillViewport(false);pageScroll.setVerticalScrollBarEnabled(false);
+  root.addView(pageScroll,new FrameLayout.LayoutParams(-1,-1));
+  content=new LinearLayout(this);content.setOrientation(1);content.setPadding(0,0,0,dp(55));pageScroll.addView(content);
+  top=new LinearLayout(this);top.setGravity(Gravity.CENTER_VERTICAL);top.setPadding(dp(42),dp(8),dp(42),dp(8));top.setBackgroundColor(0x00000000);
+  FrameLayout.LayoutParams topLp=new FrameLayout.LayoutParams(-1,dp(66),Gravity.TOP);root.addView(top,topLp);
   TextView logo=txt("MOVIEBOX",25,RED,true);logo.setLetterSpacing(.06f);top.addView(logo,new LinearLayout.LayoutParams(dp(190),-2));
   View spacer=new View(this);top.addView(spacer,new LinearLayout.LayoutParams(0,1,1));
-  nav("⌕  Search",()->showSearch(),false);nav("♡  My List",()->showSaved("mylist"),false);nav("◷  History",()->showSaved("history"),false);nav("⚙",()->showSettings(),false);
-  pageScroll=new ScrollView(this);pageScroll.setFillViewport(false);pageScroll.setVerticalScrollBarEnabled(false);root.addView(pageScroll,new LinearLayout.LayoutParams(-1,0,1));
-  content=new LinearLayout(this);content.setOrientation(1);content.setPadding(0,0,0,dp(55));pageScroll.addView(content);
+  iconNav("search",()->showSearch());iconNav("list",()->showSaved("mylist"));iconNav("history",()->showSaved("history"));iconNav("settings",()->showSettings());
  }
  private void iconNav(String kind,Runnable action){IconView v=new IconView(kind);v.setFocusable(true);v.setClickable(true);v.setContentDescription(kind);v.setOnClickListener(w->action.run());v.setOnFocusChangeListener((w,f)->{v.setBackground(bg(f?0xff333333:0x00000000,f?WHITE:0));v.invalidate();});LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(dp(48),dp(48));p.leftMargin=dp(8);top.addView(v,p);}
  private void runApi(java.util.concurrent.Callable<JSONObject> call,java.util.function.Consumer<JSONObject> done){content.removeAllViews();TextView loading=txt("Loading MovieBox…",20,WHITE,true);loading.setPadding(dp(50),dp(60),0,0);content.addView(loading);new Thread(()->{try{JSONObject j=call.call();runOnUiThread(()->done.accept(j));}catch(Exception e){runOnUiThread(()->showError(e));}}).start();}
