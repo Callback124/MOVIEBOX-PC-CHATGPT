@@ -93,7 +93,7 @@ public class PlayerActivity extends Activity {
     private ImageView backBtn;
     private ImageView lockBtn;
     private ImageView playBtn;
-    private ImageView volBtn;
+    private TextView volBtn;
     private TextView titleView;
     private TextView timeView;
     private SeekView seek;
@@ -609,7 +609,7 @@ public class PlayerActivity extends Activity {
     private void toggleMute() {
         muted = !muted;
         if (player != null) player.setVolume(muted ? 0f : 1f);
-        volBtn.setImageResource(drawableId(muted ? "ic_volume_off" : "ic_volume"));
+        volBtn.setText(muted ? "MUTED" : "VOL");
     }
 
     private void cycleSpeed() {
