@@ -929,6 +929,22 @@ public class PlayerActivity extends Activity {
 
     private List<Opt> videoOpts() {
         List<Opt> out = new ArrayList<>();
+        // MovieBox resources are the authoritative quality choices. Keep every API resource
+        // in this single menu; do not add the currently-playing decoder track as a second row.
+        if (movieBoxMode) {
+            if (sourceVariants.length() == 0) {
+                out.add(new Opt(resourcesLoading ? "Loading resources…" : "No resources available", false, () -> { }));
+                return out;
+            }
+            for (int i = 0; i < sourceVariants.length(); i++) {
+                final JSONObject source = sourceVariants.optJSONObject(i);
+                if (source == null) continue;
+                String quality = source.optString("quality", "Auto");
+                boolean selected = source.optString("url", "").equals(activeSourceUrl);
+                out.add(new Opt(quality, selected, () -> switchSource(source)));
+            }
+            return out;
+        }
         List<TrackRef> refs = trackRefs(C.TRACK_TYPE_VIDEO);
         Collections.sort(refs, new Comparator<TrackRef>() {
             @Override
@@ -1116,15 +1132,64 @@ public class PlayerActivity extends Activity {
             out.add(new Opt(name, selected, () -> {
                 movieBoxSubjectId = id;
                 movieBoxDetailPath = dub.optString("detailPath", "");
-                String apiTitle = dub.optString("title", dub.optString("name", "")).trim();
-                basePlayerTitle = apiTitle.isEmpty() ? originalPlayerTitle : apiTitle;
-                titleView.setText(basePlayerTitle);
-                fetchMovieBoxResources(movieBoxSubjectId, movieBoxDetailPath, movieBoxSeason, movieBoxEpisode, true);
-                toast("Loading " + name + " resources…");
+                final String fallbackTitle = originalPlayerTitle;
+                final String selectedDubName = name;
+                titleView.setText("Loading title…");
+                new Thread(() -> {
+                    String resolvedTitle = dub.optString("title", dub.optString("name", "")).trim();
+                    if (resolvedTitle.isEmpty()) resolvedTitle = fetchMovieBoxSubjectTitle(id);
+                    final String finalTitle = resolvedTitle == null || resolvedTitle.trim().isEmpty() ? fallbackTitle : resolvedTitle.trim();
+                    runOnUiThread(() -> {
+                        basePlayerTitle = finalTitle;
+                        titleView.setText(basePlayerTitle);
+                        fetchMovieBoxResources(movieBoxSubjectId, movieBoxDetailPath, movieBoxSeason, movieBoxEpisode, true);
+                        if (sheetOpen) renderSheet(false);
+                    });
+                }).start();
+                toast("Loading " + selectedDubName + "…");
             }));
         }
         if (out.isEmpty()) out.add(new Opt("No dubbed languages available", false, () -> { }));
         return out;
+    }
+
+    private String fetchMovieBoxSubjectTitle(String subjectId) {
+        String[] bases = new String[]{"https://movieboxph.org/wefeed-h5api-bff/", "https://h5-api.aoneroom.com/wefeed-h5api-bff/"};
+        for (String base : bases) {
+            HttpURLConnection connection = null;
+            try {
+                String query = "detail?subjectId=" + URLEncoder.encode(subjectId, "UTF-8");
+                connection = (HttpURLConnection) new URL(base + query).openConnection();
+                connection.setRequestMethod("GET");
+                connection.setConnectTimeout(12000);
+                connection.setReadTimeout(18000);
+                connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36");
+                connection.setRequestProperty("Accept", "*/*");
+                connection.setRequestProperty("Origin", "https://movieboxph.org");
+                connection.setRequestProperty("Referer", "https://movieboxph.org/");
+                connection.setRequestProperty("x-client-info", "{\\"timezone\\":\\"Asia/Calcutta\\"}");
+                connection.setRequestProperty("x-request-lang", "en");
+                if (movieBoxToken != null && !movieBoxToken.isEmpty()) {
+                    String clean = movieBoxToken.replaceFirst("(?i)^Bearer\\s+", "");
+                    connection.setRequestProperty("Authorization", "Bearer " + clean);
+                    connection.setRequestProperty("x-user", clean);
+                }
+                InputStream input = connection.getResponseCode() >= 400 ? connection.getErrorStream() : connection.getInputStream();
+                BufferedReader reader = new BufferedReader(new InputStreamReader(input, "UTF-8"));
+                StringBuilder body = new StringBuilder(); String line;
+                while ((line = reader.readLine()) != null) body.append(line);
+                reader.close();
+                JSONObject payload = new JSONObject(body.toString());
+                JSONObject data = payload.optJSONObject("data");
+                JSONObject subject = data == null ? null : data.optJSONObject("subject");
+                if (subject != null) {
+                    String title = subject.optString("title", subject.optString("name", "")).trim();
+                    if (!title.isEmpty()) return title;
+                }
+            } catch (Exception ignored) {
+            } finally { if (connection != null) connection.disconnect(); }
+        }
+        return "";
     }
 
     private int currentEpisodeIndex() {
