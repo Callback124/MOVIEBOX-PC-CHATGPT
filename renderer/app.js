@@ -176,25 +176,25 @@ async function watchTrailer(type, id) {
 }
 
 function openSettings() {
-  const lang = store.get('lang', 'en-US'), reg = region();
-  const langs = [['en-US', 'English'], ['hi-IN', 'हिन्दी (Hindi)'], ['ta-IN', 'Tamil'], ['te-IN', 'Telugu'], ['bn-IN', 'Bengali'], ['ml-IN', 'Malayalam'], ['kn-IN', 'Kannada'], ['es-ES', 'Español'], ['fr-FR', 'Français']];
-  const regs = [['IN', 'India'], ['US', 'United States'], ['GB', 'United Kingdom'], ['CA', 'Canada'], ['AU', 'Australia'], ['AE', 'UAE'], ['DE', 'Germany'], ['FR', 'France']];
-  openModal(`<h2 style="margin-top:0">Settings</h2>
-    <label class="field" for="s-key">TMDB API key or Read Access Token</label>
-    <input id="s-key" type="password" autocomplete="off" placeholder="Paste your key" value="${esc(store.get('key', ''))}">
-    <p class="note">MovieBox search session is fetched automatically from the Home API.</p>
-    <label class="field" for="s-lang">Content language</label>
-    <select id="s-lang">${langs.map(([v, n]) => `<option value="${v}" ${v === lang ? 'selected' : ''}>${n}</option>`).join('')}</select>
-    <label class="field" for="s-reg">Region (for "where to watch")</label>
-    <select id="s-reg">${regs.map(([v, n]) => `<option value="${v}" ${v === reg ? 'selected' : ''}>${n}</option>`).join('')}</select>
-    <p class="note"><b>About:</b> This product uses the TMDB API but is not endorsed or certified by TMDB. Streaming availability data provided by JustWatch. Music previews and artwork provided by Apple.</p>
-    <p class="note">Your key is stored only on this computer. Get a free key at themoviedb.org → Settings → API.</p>
-    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px"><button class="btn" id="s-clear">Clear history</button><button class="btn primary" id="s-save">Save</button></div>`, 'small');
-  $('#s-save').onclick = () => {
-    store.set('key', $('#s-key').value.trim()); store.set('lang', $('#s-lang').value); store.set('region', $('#s-reg').value);
-    cache.clear(); genreMap = null; closeModal(); route();
-  };
-  $('#s-clear').onclick = () => { store.set('history', []); store.set('recents', []); closeModal(); route(); };
+  const servers = [
+    { id: 'moviebox', name: 'MovieBox', status: 'Available', active: true },
+    { id: 'server2', name: 'Server 2', status: 'Coming soon', active: false },
+    { id: 'server3', name: 'Server 3', status: 'Coming soon', active: false }
+  ];
+  openModal(`<div class="settings-panel">
+    <h2 style="margin:0 0 8px">Settings</h2>
+    <p class="note" style="margin:0 0 18px">Choose your playback server</p>
+    <div class="server-list">${servers.map((server) => `<button class="server-option ${server.active ? 'selected' : ''}" data-server="${server.id}" ${server.active ? '' : 'disabled'}>
+      <span class="server-mark">▣</span><span class="server-copy"><b>${server.name}</b><small>${server.status}</small></span><span class="server-check">${server.active ? '✓' : ''}</span>
+    </button>`).join('')}</div>
+    <p class="note" style="margin-top:16px">More servers will be added later.</p>
+  </div>`, 'small');
+  modal.querySelectorAll('.server-option:not(:disabled)').forEach((button) => {
+    button.onclick = () => {
+      store.set('playbackServer', button.dataset.server);
+      modal.querySelectorAll('.server-option').forEach((item) => item.classList.toggle('selected', item === button));
+    };
+  });
 }
 $('#btn-settings').onclick = openSettings;
 
@@ -755,7 +755,11 @@ async function browseView(kind, catIdx = 0) {
 
 async function searchView(q) {
   clearInterval(heroTimer);
-  view.innerHTML = `<div class="searchbar"><span class="si">${ICON.search}</span><input id="q" placeholder="Search movies, series, anime..." autocomplete="off" value="${esc(q || '')}"><div class="sugg hidden" id="sugg"></div></div><div id="out"></div>`;
+  const header = $('.topbar'), headerSearch = $('#header-search');
+  header.classList.add('search-mode');
+  headerSearch.innerHTML = `<div class="searchbar"><span class="si">${ICON.search}</span><input id="q" placeholder="Search movies, series, anime..." autocomplete="off" value="${esc(q || '')}"><div class="sugg hidden" id="sugg"></div></div>`;
+  headerSearch.classList.remove('hidden');
+  view.innerHTML = '<div id="out"></div>';
   const input = $('#q'), sugg = $('#sugg'), out = $('#out');
   if (!q) input.focus();
   const recents = () => store.get('recents', []);
@@ -801,7 +805,7 @@ async function searchView(q) {
         .map((word) => String(word).trim()).filter(Boolean).slice(0, 8);
       sugg.innerHTML = '';
       words.forEach((word) => {
-        const option = html(`<a href="#/search/${encodeURIComponent(word)}"><span>${esc(word)}<small>Search suggestion</small></span></a>`);
+        const option = html(`<a href="#/search/${encodeURIComponent(word)}"><span>${esc(word)}</span></a>`);
         sugg.appendChild(option);
       });
       sugg.classList.toggle('hidden', !words.length);
@@ -973,6 +977,10 @@ function setTab(name) {
 }
 async function route() {
   clearInterval(heroTimer); rowFills = []; if (stopInf) stopInf();
+  const header = $('.topbar'), headerSearch = $('#header-search');
+  header.classList.remove('search-mode');
+  headerSearch.classList.add('hidden');
+  headerSearch.innerHTML = '';
   const [, a, b, c] = (location.hash || '#/home').split('/');
   window.scrollTo(0, 0);
   try {
