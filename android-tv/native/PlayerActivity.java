@@ -1077,32 +1077,60 @@ public class PlayerActivity extends Activity {
     }
 
     private void addMovieBoxSource(String url, String key, JSONObject meta, JSONArray out) {
-        for (int i = 0; i < out.length(); i++) if (url.equals(out.optJSONObject(i).optString("url"))) return;
         String format = meta.optString("format", meta.optString("mimeType", meta.optString("protocol", key)));
         String lower = (key + " " + format + " " + url).toLowerCase(Locale.ROOT);
         if (lower.contains("m3u8") || lower.contains("hls")) format = "HLS";
         else if (lower.contains("mpd") || lower.contains("dash")) format = "DASH";
         else if (lower.contains("mp4")) format = "MP4";
-        String rawQuality = meta.optString("resolutions", "");
-        if (rawQuality.isEmpty()) rawQuality = meta.optString("resolution", "");
-        if (rawQuality.isEmpty()) rawQuality = meta.optString("quality", "");
-        if (rawQuality.isEmpty()) rawQuality = meta.optString("label", "");
-        if (rawQuality.isEmpty()) rawQuality = meta.optString("name", "");
-        String quality = "";
-        if (!rawQuality.isEmpty()) {
-            String firstPart = rawQuality.split(",")[0].trim();
-            String digits = firstPart.replaceAll("\\D+", "");
-            if (!digits.isEmpty()) quality = digits + "p";
+
+        Object raw = meta.opt("resolutions");
+        if (raw == null || raw == JSONObject.NULL || raw.toString().trim().isEmpty()) raw = meta.opt("resolution");
+        if (raw == null || raw == JSONObject.NULL || raw.toString().trim().isEmpty()) raw = meta.opt("quality");
+        if (raw == null || raw == JSONObject.NULL || raw.toString().trim().isEmpty()) raw = meta.opt("label");
+        if (raw == null || raw == JSONObject.NULL || raw.toString().trim().isEmpty()) raw = meta.opt("name");
+
+        List<String> qualities = new ArrayList<>();
+        if (raw instanceof JSONArray) {
+            JSONArray values = (JSONArray) raw;
+            for (int i = 0; i < values.length(); i++) addQualityToken(qualities, values.opt(i));
+        } else if (raw != null && raw != JSONObject.NULL) {
+            String value = String.valueOf(raw);
+            for (String part : value.split("[,;|]")) addQualityToken(qualities, part);
         }
-        if (quality.isEmpty()) {
+        if (qualities.isEmpty()) {
             int height = meta.optInt("height", 0);
-            if (height > 0) quality = height + "p";
+            if (height > 0) qualities.add(height + "p");
             else {
                 java.util.regex.Matcher m = java.util.regex.Pattern.compile("(2160|1440|1080|720|576|540|480|360|240|144)\\s*p?", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(meta.toString() + " " + url);
-                quality = m.find() ? m.group(1) + "p" : "Auto";
+                if (m.find()) qualities.add(m.group(1) + "p");
             }
         }
-        try { JSONObject item = new JSONObject(); item.put("url", url); item.put("format", format); item.put("quality", quality); out.put(item); } catch (Exception ignored) { }
+        if (qualities.isEmpty()) qualities.add("Auto");
+
+        for (String quality : qualities) {
+            boolean duplicate = false;
+            for (int i = 0; i < out.length(); i++) {
+                JSONObject existing = out.optJSONObject(i);
+                if (existing != null && url.equals(existing.optString("url")) && quality.equals(existing.optString("quality"))) { duplicate = true; break; }
+            }
+            if (duplicate) continue;
+            try {
+                JSONObject item = new JSONObject();
+                item.put("url", url); item.put("format", format); item.put("quality", quality);
+                out.put(item);
+            } catch (Exception ignored) { }
+        }
+    }
+
+    private static void addQualityToken(List<String> out, Object value) {
+        if (value == null || value == JSONObject.NULL) return;
+        String text = String.valueOf(value).trim();
+        if (text.isEmpty()) return;
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(2160|1440|1080|720|576|540|480|360|240|144)\\s*p?", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(text);
+        while (m.find()) {
+            String quality = m.group(1) + "p";
+            if (!out.contains(quality)) out.add(quality);
+        }
     }
 
     private void playSource(JSONObject source, long position) {
