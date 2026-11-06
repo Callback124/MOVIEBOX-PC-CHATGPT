@@ -1254,8 +1254,8 @@ public class PlayerActivity extends Activity {
     private void updateEpisodeSubtitle() {
         if (episodeSubtitleView == null) return;
         boolean episodic = episodeSequence.length() > 0 && movieBoxMode;
-        episodeSubtitleView.setVisibility(episodic ? View.VISIBLE : View.GONE);
-        if (episodic) episodeSubtitleView.setText(String.format(Locale.US, "S%02d  EP %d", movieBoxSeason, movieBoxEpisode));
+        // The selected episode is already included in the player title; avoid a duplicate subtitle row.
+        episodeSubtitleView.setVisibility(View.GONE);
         updateEpisodeControls();
     }
 
