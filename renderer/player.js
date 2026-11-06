@@ -278,15 +278,22 @@
 
   async function play(o) {
     const n = native();
-    if (n && /^https?:\/\//i.test(o.src)) {
+    if (n && (o.movieBox || /^https?:\/\//i.test(o.src))) {
       try {
         await n.play({
-          url: o.src,
+          url: o.src || '',
           title: o.title || '',
-          position: store.get('mbp:pos:' + o.src, 0),
+          position: o.src ? store.get('mbp:pos:' + o.src, 0) : 0,
           format: o.format || '',
           headers: o.headers || {},
-          sources: Array.isArray(o.sources) ? o.sources : []
+          sources: Array.isArray(o.sources) ? o.sources : [],
+          movieBox: !!o.movieBox,
+          subjectId: o.subjectId || '',
+          season: Number(o.season || 0),
+          episode: Number(o.episode || 0),
+          detailPath: o.detailPath || '',
+          token: o.token || '',
+          dubs: Array.isArray(o.dubs) ? o.dubs : []
         });
         return true;
       } catch (error) {
