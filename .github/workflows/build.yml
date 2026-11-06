@@ -1,4 +1,4 @@
-name: Build MovieBox (Windows exe + Android TV apk)
+name: Build MovieBox Windows EXE
 on:
   push:
     branches: ['**']
@@ -19,21 +19,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with: { name: MovieBox-exe, path: dist/MovieBox.exe }
 
-  apk:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 20 }
-      - uses: actions/setup-java@v4
-        with: { distribution: temurin, java-version: 17 }
-      - name: Build Android TV apk (native Media3 ExoPlayer)
-        run: bash android-tv/build-apk.sh
-      - uses: actions/upload-artifact@v4
-        with: { name: MovieBox-TV-apk, path: android-tv/MovieBox-TV.apk }
 
   release:
-    needs: [exe, apk]
+    needs: [exe]
     # publish the exe even if the apk job fails, so one broken part never blocks the other
     if: ${{ !cancelled() && needs.exe.result == 'success' }}
     runs-on: ubuntu-latest
@@ -46,4 +34,3 @@ jobs:
           name: MovieBox (latest build)
           files: |
             out/MovieBox.exe
-            out/MovieBox-TV.apk
