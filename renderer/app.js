@@ -426,7 +426,7 @@ function movieBoxPlaybackReferer(detailPath) {
   if (value.toLowerCase().startsWith('play/')) value = value.slice(5);
   return 'https://movieboxph.org/play/' + value;
 }
-async function playMovieBoxEpisode(subjectId, se, ep, title, detailPath = '') {
+async function playMovieBoxEpisode(subjectId, se, ep, title, detailPath = '', dubList = null) {
   const status = $('.mb-play-status');
   try {
     if (typeof window.MB_play !== 'function') throw new Error('Built-in ExoPlayer bridge is unavailable. Install the latest Android APK.');
@@ -440,7 +440,7 @@ async function playMovieBoxEpisode(subjectId, se, ep, title, detailPath = '') {
         store.set('movieboxToken', token);
       }
     }
-    const dubs = (window.__mbDubsBySubject && window.__mbDubsBySubject[String(subjectId)]) || [];
+    const dubs = Array.isArray(dubList) ? dubList : ((window.__mbDubsBySubject && window.__mbDubsBySubject[String(subjectId)]) || []);
     const headers = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36',
       Referer: movieBoxPlaybackReferer(detailPath),
@@ -502,6 +502,7 @@ async function movieBoxDetailView(id) {
   ) : [];
   window.__mbDubsBySubject = window.__mbDubsBySubject || {};
   window.__mbDubsBySubject[String(id)] = dubEntries;
+  dubEntries.forEach((dub) => { window.__mbDubsBySubject[String(dub.subjectId)] = dubEntries; });
   if (dubEntries.length) {
     const dubWrap = html('<section class="mb-dubs" style="margin:16px 0"><h3 class="h-sm">Audio Languages</h3><div class="chips mb-dub-chips"></div></section>');
     const chipBox = $('.mb-dub-chips', dubWrap);
@@ -509,11 +510,17 @@ async function movieBoxDetailView(id) {
       const label = String(dub.lanName || dub.lanCode || (dub.original ? 'Original Audio' : 'Dub')).replace(/\\s+/g, ' ').trim();
       const chip = html('<button type="button" class="chip">' + esc(label) + '</button>');
       if (String(dub.subjectId) === String(id)) chip.classList.add('on');
-      chip.onclick = () => playMovieBoxEpisode(
-        String(dub.subjectId), 0, 0,
-        title + ' · ' + label,
-        String(dub.detailPath || '')
-      );
+      chip.onclick = () => {
+        const firstEpisode = Array.isArray(window.__mbEpisodeSequence) ? window.__mbEpisodeSequence[0] : null;
+        const seasonNo = firstEpisode ? Number(firstEpisode.se) : 0;
+        const episodeNo = firstEpisode ? Number(firstEpisode.ep) : 0;
+        const episodeLabel = firstEpisode ? ' · S' + seasonNo + ' E' + episodeNo : '';
+        playMovieBoxEpisode(
+          String(dub.subjectId), seasonNo, episodeNo,
+          title + ' · ' + label + episodeLabel,
+          String(dub.detailPath || ''), dubEntries
+        );
+      };
       chipBox.appendChild(chip);
     });
     actions.insertAdjacentElement('afterend', dubWrap);
@@ -531,6 +538,7 @@ async function movieBoxDetailView(id) {
   });
   if (!stars.length) $('.mb-cast-wrap', page).remove();
   const episodesBox = $('.mb-episodes', page);
+  window.__mbEpisodeSequence = [];
   if (identity.isSeries && seasons.length) {
     const usable = seasons.filter((s) => Number(s.se) > 0 && Number(s.maxEp) > 0);
     const seasonList = usable.length ? usable : seasons;
