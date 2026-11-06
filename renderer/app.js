@@ -453,37 +453,25 @@ async function playMovieBoxEpisode(subjectId, se, ep, title, detailPath = '') {
       const apiMessage = lastPayload?.message || data?.message || lastAttemptError?.message || 'No direct stream URL was returned';
       throw new Error(apiMessage + ' (hasResource: ' + String(data?.hasResource) + '; tried se=' + attempts.map(x => x.se + ',ep=' + x.ep).join(' and ') + ')');
     }
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36',
+      Referer: movieBoxPlaybackReferer(detailPath),
+      Origin: 'https://movieboxph.org',
+      Accept: '*/*'
+    };
     const start = async (source) => {
       if (typeof window.MB_play !== 'function') throw new Error('Built-in ExoPlayer bridge is not loaded. Rebuild the latest Android APK.');
-      if (status) { status.style.display = 'block'; status.textContent = 'Opening ' + (source.label || source.resolution || source.kind) + ' in ExoPlayer…'; }
-      try {
-        await window.MB_play({
-          src: source.url,
-          format: source.kind,
-          title: title + (source.label || source.resolution ? ' · ' + (source.label || source.resolution) : ''),
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36',
-            Referer: movieBoxPlaybackReferer(detailPath),
-            Origin: 'https://movieboxph.org',
-            Accept: '*/*'
-          }
-        });
-        if (status) status.textContent = 'Player launch request accepted. If the player did not open, rebuild and install this APK.';
-      } catch (error) {
-        if (status) status.textContent = 'Player launch error: ' + (error?.message || error);
-        throw error;
-      }
-    };
-    if (options.length === 1) start(options[0]);
-    else {
-      if (status) { status.style.display = 'none'; status.textContent = ''; }
-      openModal('<h2 style="margin-top:0">Select video quality</h2><div class="source-list">' +
-        options.map((x, i) => '<button class="btn source-option" data-source="' + i + '">' +
-          esc(movieBoxSourceQuality(x)) + ' · ' + esc(x.kind) + '</button>').join('') + '</div>', 'small');
-      modal.querySelectorAll('[data-source]').forEach((button) => {
-        button.onclick = () => { const selected = options[Number(button.dataset.source)]; closeModal(); start(selected); };
+      if (status) { status.style.display = 'block'; status.textContent = 'Opening ExoPlayer…'; }
+      await window.MB_play({
+        src: source.url, format: source.kind,
+        title: title + ' · ' + movieBoxSourceQuality(source),
+        headers,
+        sources: options.map((item) => ({ url: item.url, format: item.kind, quality: movieBoxSourceQuality(item), label: item.label || '' }))
       });
-    }
+    };
+    // Always launch the player immediately. Available source variants are sent to
+    // the native player so the viewer can change quality without returning here.
+    await start(options[0]);
   } catch (error) {
     if (status) { status.style.display = 'block'; status.textContent = 'Playback error: ' + error.message; }
     else console.error('MovieBox playback error:', error);
@@ -524,6 +512,26 @@ async function movieBoxDetailView(id) {
     button.onclick = () => playMovieBoxEpisode(String(id), se, ep, title + (label ? ' · ' + label : ''), detailPath);
     actions.appendChild(button);
   };
+  // MovieBox exposes alternate dubbed versions as separate subjects (type 0).
+  const dubEntries = Array.isArray(subject.dubs) ? subject.dubs.filter((d) =>
+    d && Number(d.type || 0) === 0 && String(d.subjectId || '').trim()
+  ) : [];
+  if (dubEntries.length) {
+    const dubWrap = html('<section class="mb-dubs" style="margin:16px 0"><h3 class="h-sm">Audio Languages</h3><div class="chips mb-dub-chips"></div></section>');
+    const chipBox = $('.mb-dub-chips', dubWrap);
+    dubEntries.forEach((dub) => {
+      const label = String(dub.lanName || dub.lanCode || (dub.original ? 'Original Audio' : 'Dub')).replace(/\\s+/g, ' ').trim();
+      const chip = html('<button type="button" class="chip">' + esc(label) + '</button>');
+      if (String(dub.subjectId) === String(id)) chip.classList.add('on');
+      chip.onclick = () => playMovieBoxEpisode(
+        String(dub.subjectId), 0, 0,
+        title + ' · ' + label,
+        String(dub.detailPath || '')
+      );
+      chipBox.appendChild(chip);
+    });
+    actions.insertAdjacentElement('afterend', dubWrap);
+  }
   const listButton = html('<button class="btn">+ My List</button>');
   const syncList = () => { listButton.textContent = myList.has('moviebox', String(id)) ? '✓ In My List' : '+ My List'; };
   syncList(); listButton.onclick = () => { myList.toggle(historyItem); syncList(); }; actions.appendChild(listButton);
