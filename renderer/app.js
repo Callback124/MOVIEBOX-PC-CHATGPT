@@ -510,16 +510,38 @@ async function movieBoxDetailView(id) {
       const label = String(dub.lanName || dub.lanCode || (dub.original ? 'Original Audio' : 'Dub')).replace(/\\s+/g, ' ').trim();
       const chip = html('<button type="button" class="chip">' + esc(label) + '</button>');
       if (String(dub.subjectId) === String(id)) chip.classList.add('on');
-      chip.onclick = () => {
+      chip.onclick = async () => {
         const firstEpisode = Array.isArray(window.__mbEpisodeSequence) ? window.__mbEpisodeSequence[0] : null;
         const seasonNo = firstEpisode ? Number(firstEpisode.se) : 0;
         const episodeNo = firstEpisode ? Number(firstEpisode.ep) : 0;
         const episodeLabel = firstEpisode ? ' · S' + seasonNo + ' E' + episodeNo : '';
-        playMovieBoxEpisode(
-          String(dub.subjectId), seasonNo, episodeNo,
-          String(dub.title || dub.name || title) + episodeLabel,
-          String(dub.detailPath || ''), dubEntries
-        );
+        const status = $('.mb-play-status');
+        if (status) { status.style.display = 'block'; status.textContent = 'Loading selected audio version title…'; }
+        try {
+          const detail = await movieBoxApiGet('detail', { subjectId: String(dub.subjectId) });
+          const dubSubject = detail?.data?.subject || detail?.subject || {};
+          const exactTitle = String(dubSubject.title || dubSubject.name || '').trim();
+          if (!exactTitle) throw new Error('Selected dub detail did not return a title');
+          const enrichedDubs = await Promise.all(dubEntries.map(async (entry) => {
+            if (String(entry.subjectId) === String(dub.subjectId)) return { ...entry, title: exactTitle };
+            if (entry.title || entry.name) return entry;
+            try {
+              const response = await movieBoxApiGet('detail', { subjectId: String(entry.subjectId) });
+              const subjectData = response?.data?.subject || response?.subject || {};
+              const fetchedTitle = String(subjectData.title || subjectData.name || '').trim();
+              return fetchedTitle ? { ...entry, title: fetchedTitle } : entry;
+            } catch (_) { return entry; }
+          }));
+          chipBox.querySelectorAll('.chip').forEach((node) => node.classList.remove('on'));
+          chip.classList.add('on');
+          playMovieBoxEpisode(
+            String(dub.subjectId), seasonNo, episodeNo,
+            exactTitle + episodeLabel,
+            String(dub.detailPath || dubSubject.detailPath || ''), enrichedDubs
+          );
+        } catch (error) {
+          if (status) status.textContent = 'Dub title load failed: ' + (error?.message || error);
+        }
       };
       chipBox.appendChild(chip);
     });
