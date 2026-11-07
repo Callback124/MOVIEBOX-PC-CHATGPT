@@ -53,7 +53,13 @@ public final class MovieBoxRepository {
   public JSONObject play(String id,String detailPath,int se,int ep)throws Exception{
     String p="subject/play?subjectId="+URLEncoder.encode(id,"UTF-8")+"&se="+Math.max(0,se)+"&ep="+Math.max(0,ep);
     if(detailPath!=null&&!detailPath.isEmpty())p+="&detailPath="+URLEncoder.encode(detailPath,"UTF-8");
-    return authorizedRequest(p,"GET",null,true);
+    home(); // Match the web TV app: obtain a fresh /home session before every play request.
+    try{return request(p,"GET",null,token(),true,detailPath);}
+    catch(Exception first){
+      if(!isInvalidToken(first))throw first;
+      home();
+      return request(p,"GET",null,token(),true,detailPath);
+    }
   }
   private JSONObject authorizedRequest(String path,String method,JSONObject body,boolean playback)throws Exception{
     home(); // fresh x-user token for this request, not a cached token
@@ -69,15 +75,29 @@ public final class MovieBoxRepository {
     return m.contains("invalid token")||m.contains("params_error");
   }
   private JSONObject request(String path,String method,JSONObject body,String token,boolean playback)throws Exception{
+    return request(path,method,body,token,playback,null);
+  }
+  private JSONObject request(String path,String method,JSONObject body,String token,boolean playback,String detailPath)throws Exception{
     String[] bases=playback?new String[]{BASES[1],BASES[0]}:BASES; Exception last=null;
-    for(String b:bases)try{return read(connect(b+path,method,body,token));}catch(Exception e){last=e;}
+    for(String b:bases)try{return read(connect(b+path,method,body,token,detailPath));}catch(Exception e){last=e;}
     throw last==null?new IOException("MovieBox request failed"):last;
   }
+  private String playbackReferer(String detailPath){
+    String value=detailPath==null?"":detailPath.trim();
+    if(value.isEmpty())return "https://movieboxph.org/";
+    if(value.startsWith("https://")||value.startsWith("http://"))return value;
+    if(value.startsWith("/"))return "https://movieboxph.org"+value;
+    if(value.regionMatches(true,0,"play/",0,5))value=value.substring(5);
+    return "https://movieboxph.org/play/"+value;
+  }
   private HttpURLConnection connect(String url,String method,JSONObject body,String token)throws Exception{
+    return connect(url,method,body,token,null);
+  }
+  private HttpURLConnection connect(String url,String method,JSONObject body,String token,String detailPath)throws Exception{
     HttpURLConnection c=(HttpURLConnection)new URL(url).openConnection();
     c.setRequestMethod(method);c.setConnectTimeout(15000);c.setReadTimeout(25000);c.setUseCaches(false);
     c.setRequestProperty("User-Agent",UA);c.setRequestProperty("Origin","https://movieboxph.org");
-    c.setRequestProperty("Referer","https://movieboxph.org/");c.setRequestProperty("Accept","application/json, text/plain, */*");
+    c.setRequestProperty("Referer",playbackReferer(detailPath));c.setRequestProperty("Accept","application/json, text/plain, */*");
     c.setRequestProperty("Accept-Language","en-US,en;q=0.9");c.setRequestProperty("x-request-lang","en");
     c.setRequestProperty("x-client-info","{\"timezone\":\"Asia/Calcutta\"}");
     c.setRequestProperty("Cache-Control","no-cache");c.setRequestProperty("Pragma","no-cache");
