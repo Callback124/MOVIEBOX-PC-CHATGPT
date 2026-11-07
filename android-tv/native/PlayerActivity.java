@@ -986,69 +986,145 @@ public class PlayerActivity extends Activity {
         return out;
     }
 
+    private String fetchFreshMovieBoxToken() throws Exception {
+        String[] bases = new String[]{"https://movieboxph.org/wefeed-h5api-bff/", "https://h5-api.aoneroom.com/wefeed-h5api-bff/"};
+        Exception last = null;
+        for (String base : bases) {
+            HttpURLConnection connection = null;
+            try {
+                connection = (HttpURLConnection) new URL(base + "home").openConnection();
+                connection.setRequestMethod("GET");
+                connection.setConnectTimeout(15000);
+                connection.setReadTimeout(25000);
+                connection.setUseCaches(false);
+                connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36");
+                connection.setRequestProperty("Accept", "application/json, text/plain, */*");
+                connection.setRequestProperty("Origin", "https://movieboxph.org");
+                connection.setRequestProperty("Referer", "https://movieboxph.org/");
+                connection.setRequestProperty("x-client-info", "{\"timezone\":\"Asia/Calcutta\"}");
+                connection.setRequestProperty("x-request-lang", "en");
+                int status = connection.getResponseCode();
+                InputStream input = status >= 200 && status < 300 ? connection.getInputStream() : connection.getErrorStream();
+                StringBuilder body = new StringBuilder();
+                if (input != null) {
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(input, "UTF-8"));
+                    String line;
+                    while ((line = reader.readLine()) != null) body.append(line);
+                    reader.close();
+                }
+                if (status < 200 || status >= 300) throw new Exception("MovieBox /home HTTP " + status + ": " + body);
+                JSONObject payload = new JSONObject(body.toString());
+                String header = connection.getHeaderField("x-user");
+                String token = "";
+                if (header != null && !header.trim().isEmpty()) {
+                    String value = header.trim();
+                    if (value.startsWith("{")) {
+                        try { token = new JSONObject(value).optString("token", ""); } catch (Exception ignored) { }
+                    } else {
+                        token = value;
+                    }
+                }
+                if (token.trim().isEmpty()) token = payload.optString("token", "");
+                token = token == null ? "" : token.trim().replaceFirst("(?i)^Bearer\\s+", "");
+                if (token.isEmpty()) throw new Exception("MovieBox /home did not return a fresh x-user token");
+                return token;
+            } catch (Exception e) {
+                last = e;
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+        }
+        throw last == null ? new Exception("MovieBox /home session request failed") : last;
+    }
+
+    private String movieBoxReferer(String detailPath) {
+        String path = detailPath == null ? "" : detailPath.trim();
+        if (path.isEmpty()) return "https://movieboxph.org/";
+        if (path.startsWith("https://") || path.startsWith("http://")) return path;
+        if (path.startsWith("/")) return "https://movieboxph.org" + path;
+        if (path.regionMatches(true, 0, "play/", 0, 5)) path = path.substring(5);
+        return "https://movieboxph.org/play/" + path;
+    }
+
     private void fetchMovieBoxResources(String subjectId, String detailPath, int season, int episode, boolean preservePosition) {
         if (resourcesLoading) return;
         resourcesLoading = true;
         final long resumeAt = preservePosition && player != null ? Math.max(0, player.getCurrentPosition()) : 0L;
         new Thread(() -> {
             Exception last = null;
+            try {
+                // Match the web app's session flow: /home first, then use its fresh x-user token.
+                movieBoxToken = fetchFreshMovieBoxToken();
+            } catch (Exception e) {
+                last = e;
+            }
             String[] bases = new String[]{"https://movieboxph.org/wefeed-h5api-bff/", "https://h5-api.aoneroom.com/wefeed-h5api-bff/"};
-            for (String base : bases) {
-                HttpURLConnection connection = null;
-                try {
-                    String query = "subject/play?subjectId=" + URLEncoder.encode(subjectId, "UTF-8")
-                            + "&se=" + Math.max(0, season) + "&ep=" + Math.max(0, episode);
-                    if (detailPath != null && !detailPath.isEmpty()) query += "&detailPath=" + URLEncoder.encode(detailPath, "UTF-8");
-                    connection = (HttpURLConnection) new URL(base + query).openConnection();
-                    connection.setRequestMethod("GET");
-                    connection.setConnectTimeout(15000);
-                    connection.setReadTimeout(25000);
-                    connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36");
-                    connection.setRequestProperty("Accept", "*/*");
-                    connection.setRequestProperty("Origin", "https://movieboxph.org");
-                    String path = detailPath == null ? "" : detailPath.trim();
-                    String referer = path.isEmpty() ? "https://movieboxph.org/" : (path.startsWith("http") ? path : "https://movieboxph.org/play/" + (path.startsWith("/") ? path.substring(1) : path));
-                    connection.setRequestProperty("Referer", referer);
-                    connection.setRequestProperty("x-client-info", "{\"timezone\":\"Asia/Calcutta\"}");
-                    connection.setRequestProperty("x-request-lang", "en");
-                    if (movieBoxToken != null && !movieBoxToken.isEmpty()) {
-                        String clean = movieBoxToken.replaceFirst("(?i)^Bearer\\s+", "");
-                        connection.setRequestProperty("Authorization", "Bearer " + clean);
-                        connection.setRequestProperty("x-user", clean);
+            if (last == null) {
+                for (String base : bases) {
+                    HttpURLConnection connection = null;
+                    try {
+                        String query = "subject/play?subjectId=" + URLEncoder.encode(subjectId, "UTF-8")
+                                + "&se=" + Math.max(0, season) + "&ep=" + Math.max(0, episode);
+                        if (detailPath != null && !detailPath.isEmpty()) query += "&detailPath=" + URLEncoder.encode(detailPath, "UTF-8");
+                        connection = (HttpURLConnection) new URL(base + query).openConnection();
+                        connection.setRequestMethod("GET");
+                        connection.setConnectTimeout(15000);
+                        connection.setReadTimeout(25000);
+                        connection.setUseCaches(false);
+                        connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36");
+                        connection.setRequestProperty("Accept", "application/json, text/plain, */*");
+                        connection.setRequestProperty("Origin", "https://movieboxph.org");
+                        connection.setRequestProperty("Referer", movieBoxReferer(detailPath));
+                        connection.setRequestProperty("x-client-info", "{\"timezone\":\"Asia/Calcutta\"}");
+                        connection.setRequestProperty("x-request-lang", "en");
+                        String cleanToken = movieBoxToken.replaceFirst("(?i)^Bearer\\s+", "");
+                        connection.setRequestProperty("Authorization", "Bearer " + cleanToken);
+                        connection.setRequestProperty("x-user", cleanToken);
+                        int status = connection.getResponseCode();
+                        InputStream input = status >= 200 && status < 300 ? connection.getInputStream() : connection.getErrorStream();
+                        StringBuilder body = new StringBuilder();
+                        if (input != null) {
+                            BufferedReader reader = new BufferedReader(new InputStreamReader(input, "UTF-8"));
+                            String line;
+                            while ((line = reader.readLine()) != null) body.append(line);
+                            reader.close();
+                        }
+                        if (status < 200 || status >= 300) throw new Exception("MovieBox subject/play HTTP " + status + ": " + body);
+                        JSONObject payload = new JSONObject(body.toString());
+                        if (payload.has("code") && payload.optInt("code") != 0) {
+                            throw new Exception("MovieBox API " + payload.optString("reason") + ": " + payload.optString("message", "play request rejected"));
+                        }
+                        JSONObject data = payload.optJSONObject("data");
+                        if (data == null) throw new Exception("MovieBox subject/play response has no data field: " + body);
+                        JSONArray found = new JSONArray();
+                        collectMovieBoxSources(data, "data", false, new JSONObject(), found);
+                        if (found.length() == 0) throw new Exception("MovieBox returned data but no playable stream URL was found. Response keys: " + data.names());
+                        List<JSONObject> sortedSources = new ArrayList<>();
+                        for (int i = 0; i < found.length(); i++) {
+                            JSONObject item = found.optJSONObject(i);
+                            if (item != null) sortedSources.add(item);
+                        }
+                        Collections.sort(sortedSources, (a, b) -> Integer.compare(
+                                qualityNumber(b.optString("quality", "")), qualityNumber(a.optString("quality", ""))));
+                        JSONArray ordered = new JSONArray();
+                        for (JSONObject item : sortedSources) ordered.put(item);
+                        final JSONArray orderedSources = ordered;
+                        JSONObject first = orderedSources.getJSONObject(0);
+                        runOnUiThread(() -> {
+                            sourceVariants = orderedSources;
+                            activeSourceUrl = first.optString("url", "");
+                            titleView.setText(formatEpisodeTitle(basePlayerTitle));
+                            playSource(first, resumeAt);
+                            if (sheetOpen) renderSheet(false);
+                        });
+                        last = null;
+                        break;
+                    } catch (Exception e) {
+                        last = e;
+                    } finally {
+                        if (connection != null) connection.disconnect();
                     }
-                    InputStream input = connection.getResponseCode() >= 400 ? connection.getErrorStream() : connection.getInputStream();
-                    BufferedReader reader = new BufferedReader(new InputStreamReader(input, "UTF-8"));
-                    StringBuilder body = new StringBuilder(); String line;
-                    while ((line = reader.readLine()) != null) body.append(line);
-                    reader.close();
-                    JSONObject payload = new JSONObject(body.toString());
-                    JSONObject data = payload.optJSONObject("data");
-                    if (data == null) data = payload;
-                    JSONArray found = new JSONArray();
-                    collectMovieBoxSources(data, "data", false, new JSONObject(), found);
-                    if (found.length() == 0) throw new Exception(payload.optString("message", "No playable resources returned"));
-                    List<JSONObject> sortedSources = new ArrayList<>();
-                    for (int i = 0; i < found.length(); i++) {
-                        JSONObject item = found.optJSONObject(i);
-                        if (item != null) sortedSources.add(item);
-                    }
-                    Collections.sort(sortedSources, (a, b) -> Integer.compare(
-                            qualityNumber(b.optString("quality", "")), qualityNumber(a.optString("quality", ""))));
-                    JSONArray ordered = new JSONArray();
-                    for (JSONObject item : sortedSources) ordered.put(item);
-                    final JSONArray orderedSources = ordered;
-                    JSONObject first = orderedSources.getJSONObject(0);
-                    runOnUiThread(() -> {
-                        sourceVariants = orderedSources;
-                        activeSourceUrl = first.optString("url", "");
-                        titleView.setText(formatEpisodeTitle(basePlayerTitle));
-                        playSource(first, resumeAt);
-                        if (sheetOpen) renderSheet(false);
-                    });
-                    last = null;
-                    break;
-                } catch (Exception e) { last = e; }
-                finally { if (connection != null) connection.disconnect(); }
+                }
             }
             final Exception error = last;
             runOnUiThread(() -> {
