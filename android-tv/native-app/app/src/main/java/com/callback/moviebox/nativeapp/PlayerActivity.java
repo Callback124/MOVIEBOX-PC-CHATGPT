@@ -296,6 +296,20 @@ public class PlayerActivity extends Activity {
                 ? dubTitle.trim() : (title == null ? "" : title);
         originalPlayerTitle = title == null ? basePlayerTitle : title;
         updateEpisodeSubtitle();
+        // A detail-page dub chip may not include the localized subject title.
+        // Resolve it from the selected dub subject just as the in-player dub menu does.
+        if (movieBoxMode && (dubTitle == null || dubTitle.trim().isEmpty()
+                || dubTitle.trim().equals(title))) {
+            new Thread(() -> {
+                String resolved = fetchMovieBoxSubjectTitle(movieBoxSubjectId);
+                if (resolved != null && !resolved.trim().isEmpty()) {
+                    runOnUiThread(() -> {
+                        basePlayerTitle = resolved.trim();
+                        titleView.setText(formatEpisodeTitle(basePlayerTitle));
+                    });
+                }
+            }).start();
+        }
         String format = getIntent().getStringExtra("format");
         long pos = getIntent().getLongExtra("pos", 0L);
         titleView.setText(formatEpisodeTitle(basePlayerTitle));
@@ -425,20 +439,24 @@ public class PlayerActivity extends Activity {
         centerRow = new LinearLayout(this);
         centerRow.setOrientation(LinearLayout.HORIZONTAL);
         centerRow.setGravity(Gravity.CENTER);
-        previousEpisodeBtn = iconButton("ic_skip_previous", 16);
+        previousEpisodeBtn = iconButton("ic_skip_previous", 5);
         previousEpisodeBtn.setOnClickListener(v -> playAdjacentEpisode(-1));
-        centerRow.addView(previousEpisodeBtn, new LinearLayout.LayoutParams(dp(52), dp(64)));
-        centerRow.addView(skipCell("ic_replay", -10000), new LinearLayout.LayoutParams(dp(64), dp(64)));
-        playBtn = iconButton("ic_play", 20);
+        LinearLayout.LayoutParams epPrevLp = new LinearLayout.LayoutParams(dp(76), dp(84));
+        epPrevLp.rightMargin = dp(22);
+        centerRow.addView(previousEpisodeBtn, epPrevLp);
+        centerRow.addView(skipCell("ic_replay", -10000), new LinearLayout.LayoutParams(dp(76), dp(84)));
+        playBtn = iconButton("ic_play", 14);
         playBtn.setOnClickListener(v -> togglePlay());
-        LinearLayout.LayoutParams pp = new LinearLayout.LayoutParams(dp(88), dp(88));
-        pp.leftMargin = dp(56);
-        pp.rightMargin = dp(56);
+        LinearLayout.LayoutParams pp = new LinearLayout.LayoutParams(dp(104), dp(104));
+        pp.leftMargin = dp(38);
+        pp.rightMargin = dp(38);
         centerRow.addView(playBtn, pp);
-        centerRow.addView(skipCell("ic_forward", 10000), new LinearLayout.LayoutParams(dp(64), dp(64)));
-        nextEpisodeBtn = iconButton("ic_skip_next", 16);
+        centerRow.addView(skipCell("ic_forward", 10000), new LinearLayout.LayoutParams(dp(76), dp(84)));
+        nextEpisodeBtn = iconButton("ic_skip_next", 5);
         nextEpisodeBtn.setOnClickListener(v -> playAdjacentEpisode(1));
-        centerRow.addView(nextEpisodeBtn, new LinearLayout.LayoutParams(dp(52), dp(64)));
+        LinearLayout.LayoutParams epNextLp = new LinearLayout.LayoutParams(dp(76), dp(84));
+        epNextLp.leftMargin = dp(22);
+        centerRow.addView(nextEpisodeBtn, epNextLp);
         updateEpisodeControls();
         ui.addView(centerRow, new FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER));
 
