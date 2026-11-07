@@ -13,7 +13,7 @@ public final class MovieBoxRepository {
   private final SharedPreferences prefs;
   public MovieBoxRepository(Context c){prefs=c.getSharedPreferences("moviebox_native",Context.MODE_PRIVATE);}
   public String token(){return prefs.getString("token","");}
-  private void saveToken(String t){if(t!=null&&!t.trim().isEmpty())prefs.edit().putString("token",t.trim().replaceFirst("(?i)^Bearer\\s+","")).apply();}
+  private void saveToken(String t){if(t!=null&&!t.trim().isEmpty())prefs.edit().putString("token",t.trim().replaceFirst("(?i)^Bearer\\s+","")).putLong("token_time",System.currentTimeMillis()).apply();}
 
   // Every token-protected operation obtains a new session from /home first.
   public JSONObject home() throws Exception {
@@ -61,8 +61,13 @@ public final class MovieBoxRepository {
       return request(p,"GET",null,token(),true,detailPath);
     }
   }
+  private void ensureSession() throws Exception {
+    String cached=token(); long saved=prefs.getLong("token_time",0L);
+    if(cached!=null&&!cached.isEmpty()&&saved>0&&System.currentTimeMillis()-saved<8*60*1000L)return;
+    home();
+  }
   private JSONObject authorizedRequest(String path,String method,JSONObject body,boolean playback)throws Exception{
-    home(); // fresh x-user token for this request, not a cached token
+    ensureSession(); // reuse a fresh session; refresh only when expired
     try{return request(path,method,body,token(),playback);}
     catch(Exception first){
       if(!isInvalidToken(first))throw first;
@@ -95,7 +100,7 @@ public final class MovieBoxRepository {
   }
   private HttpURLConnection connect(String url,String method,JSONObject body,String token,String detailPath)throws Exception{
     HttpURLConnection c=(HttpURLConnection)new URL(url).openConnection();
-    c.setRequestMethod(method);c.setConnectTimeout(15000);c.setReadTimeout(25000);c.setUseCaches(false);
+    c.setRequestMethod(method);c.setConnectTimeout(6000);c.setReadTimeout(10000);c.setUseCaches(false);
     c.setRequestProperty("User-Agent",UA);c.setRequestProperty("Origin","https://movieboxph.org");
     c.setRequestProperty("Referer",playbackReferer(detailPath));c.setRequestProperty("Accept","application/json, text/plain, */*");
     c.setRequestProperty("Accept-Language","en-US,en;q=0.9");c.setRequestProperty("x-request-lang","en");
