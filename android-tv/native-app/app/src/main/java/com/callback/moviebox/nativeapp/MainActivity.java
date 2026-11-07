@@ -199,7 +199,7 @@ public class MainActivity extends Activity {
    LinearLayout actions=new LinearLayout(this);actions.setGravity(Gravity.CENTER_VERTICAL);LinearLayout.LayoutParams al=new LinearLayout.LayoutParams(-1,dp(54));al.topMargin=dp(16);info.addView(actions,al);
    final int firstSe=series?Math.max(1,seasons.length()>0?seasons.optJSONObject(0)==null?1:seasons.optJSONObject(0).optInt("se",1):1):0;
    detailAction(actions,"▶  "+(series?"WATCH EPISODE 1":"WATCH NOW"),true,()->launchPlayer(subjectId,name,detailPath,series?firstSe:0,series?1:0,dubs,seasons,""));
-   final JSONObject savedSubject=new JSONObject(subject.toString());
+   final JSONObject savedSubject=subject;
    detailAction(actions,"＋  MY LIST",false,()->toggleSaved("mylist",savedSubject));
    // Audio language choices from the MovieBox detail response.
    if(dubs.length()>0){detailHeading("Audio Languages");LinearLayout langs=new LinearLayout(this);langs.setPadding(dp(48),0,dp(30),0);content.addView(langs);for(int i=0;i<dubs.length();i++){JSONObject dub=dubs.optJSONObject(i);if(dub==null)continue;String label=dub.optString("lanName",dub.optString("lanCode",dub.optString("title","Audio")));String did=dub.optString("subjectId",subjectId),dpath=dub.optString("detailPath",detailPath);detailAction(langs,label,false,()->launchPlayer(did,name,dpath,series?firstSe:0,series?1:0,dubs,seasons,dub.optString("title",dub.optString("name",name))));}}
