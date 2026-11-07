@@ -510,8 +510,8 @@ public class PlayerActivity extends Activity {
         return v;
     }
 
-    private TextView addButton(LinearLayout row, String icon, View.OnClickListener l) {
-        TextView v = iconButton(icon, 9);
+    private IconView addButton(LinearLayout row, String icon, View.OnClickListener l) {
+        IconView v = iconButton(icon, 9);
         v.setOnClickListener(l);
         row.addView(v, new LinearLayout.LayoutParams(dp(46), dp(46)));
         return v;
