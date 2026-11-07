@@ -42,7 +42,11 @@ public class MainActivity extends Activity {
   iconNav("search",()->showSearch());iconNav("list",()->showSaved("mylist"));iconNav("history",()->showSaved("history"));iconNav("settings",()->showSettings());
  }
  private void iconNav(String kind,Runnable action){FrameLayout tile=new FrameLayout(this);tile.setFocusable(true);tile.setClickable(true);tile.setContentDescription(kind);tile.setBackground(iconTile(false));IconView icon=new IconView(kind);FrameLayout.LayoutParams ip=new FrameLayout.LayoutParams(dp(21),dp(21),Gravity.CENTER);tile.addView(icon,ip);tile.setOnClickListener(w->action.run());tile.setOnFocusChangeListener((w,f)->{tile.setBackground(iconTile(f));tile.animate().scaleX(f?1.04f:1f).scaleY(f?1.04f:1f).setDuration(110).start();tile.setElevation(f?dp(8):0);icon.invalidate();});LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(dp(44),dp(44));p.leftMargin=dp(7);top.addView(tile,p);}
- private void runApi(java.util.concurrent.Callable<JSONObject> call,java.util.function.Consumer<JSONObject> done){content.removeAllViews();TextView loading=txt("Loading MovieBox…",20,WHITE,true);loading.setPadding(dp(50),dp(60),0,0);content.addView(loading);new Thread(()->{try{JSONObject j=call.call();runOnUiThread(()->done.accept(j));}catch(Exception e){runOnUiThread(()->showError(e));}}).start();}
+ private void runApi(java.util.concurrent.Callable<JSONObject> call,java.util.function.Consumer<JSONObject> done){
+  content.removeAllViews();FrameLayout loading=new FrameLayout(this);content.addView(loading,new LinearLayout.LayoutParams(-1,Math.max(dp(300),getResources().getDisplayMetrics().heightPixels-dp(66))));
+  ProgressBar spinner=new ProgressBar(this);spinner.setIndeterminate(true);if(android.os.Build.VERSION.SDK_INT>=21)spinner.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(RED));loading.addView(spinner,new FrameLayout.LayoutParams(dp(54),dp(54),Gravity.CENTER));
+  long started=System.currentTimeMillis();new Thread(()->{try{JSONObject j=call.call();long wait=Math.max(0,950-(System.currentTimeMillis()-started));runOnUiThread(()->loadingHandler.postDelayed(()->done.accept(j),wait));}catch(Exception e){runOnUiThread(()->showError(e));}}).start();
+ }
  private void showError(Exception e){content.removeAllViews();TextView t=txt("MovieBox could not be loaded",24,WHITE,true);t.setPadding(dp(50),dp(50),0,dp(12));content.addView(t);TextView m=txt(String.valueOf(e.getMessage()),15,MUTED,false);m.setPadding(dp(50),0,dp(50),dp(20));content.addView(m);focusText("RETRY",()->loadHome());}
  private JSONObject merged(JSONObject o){JSONObject s=o==null?null:o.optJSONObject("subject");if(s==null)return o==null?new JSONObject():o;JSONObject n=new JSONObject();try{Iterator<String>it=s.keys();while(it.hasNext()){String k=it.next();n.put(k,s.get(k));}it=o.keys();while(it.hasNext()){String k=it.next();n.put(k,o.get(k));}}catch(Exception ignored){}return n;}
  private String id(JSONObject raw){JSONObject o=merged(raw);return o.optString("subjectId",o.optString("subject_id",o.optString("id","")));}
@@ -64,7 +68,7 @@ public class MainActivity extends Activity {
    p.setColor(0xffff626b);p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(2.8f);p.setStrokeCap(Paint.Cap.ROUND);p.setStrokeJoin(Paint.Join.ROUND);p.setShadowLayer(3f,0,0,0x99ff2938);
    if(kind.equals("search")){c.drawCircle(20,19,10.5f,p);line(c,28,27,37,36);}
    else if(kind.equals("list")){Path b=new Path();b.moveTo(14,8);b.lineTo(34,8);b.lineTo(34,39);b.lineTo(24,31);b.lineTo(14,39);b.close();c.drawPath(b,p);}
-   else if(kind.equals("history")){c.drawArc(10,10,38,38,-48,300,false,p);Path a=new Path();a.moveTo(8,9);a.lineTo(8,18);a.lineTo(17,18);c.drawPath(a,p);line(c,24,16,24,24);line(c,24,24,31,28);}
+   else if(kind.equals("history")){c.drawArc(12,12,38,38,-58,300,false,p);Path a=new Path();a.moveTo(8,10);a.lineTo(8,20);a.lineTo(18,20);c.drawPath(a,p);line(c,25,17,25,25);line(c,25,25,31,29);c.drawCircle(25,25,1.5f,p);}
    else{Path gear=new Path();for(int i=0;i<32;i++){double a=-Math.PI/2+i*Math.PI/16;float r=(i%4==0||i%4==1)?18:14.5f;float x=24+(float)Math.cos(a)*r,y=24+(float)Math.sin(a)*r;if(i==0)gear.moveTo(x,y);else gear.lineTo(x,y);}gear.close();c.drawPath(gear,p);c.drawCircle(24,24,5.5f,p);}
    p.clearShadowLayer();c.restore();
   }
@@ -155,6 +159,7 @@ public class MainActivity extends Activity {
    JSONObject subject=data.optJSONObject("subject");if(subject==null)subject=data;
    JSONObject resource=data.optJSONObject("resource");if(resource==null)resource=new JSONObject();
    final String detailPath=subject.optString("detailPath",""),name=title(subject);
+   saveCollection("history",subject);
    final boolean series=isSeries(subject);final int kind=contentType(subject);
    String cover=pick(subject,"coverVertical","verticalCover","poster","posterUrl","cover","coverUrl","image");
    String hero=pick(subject,"stills","coverHorizontal","horizontalCover","backdrop","backdropUrl","banner","image");
@@ -193,7 +198,7 @@ public class MainActivity extends Activity {
    LinearLayout actions=new LinearLayout(this);actions.setGravity(Gravity.CENTER_VERTICAL);LinearLayout.LayoutParams al=new LinearLayout.LayoutParams(-1,dp(54));al.topMargin=dp(16);info.addView(actions,al);
    final int firstSe=series?Math.max(1,seasons.length()>0?seasons.optJSONObject(0)==null?1:seasons.optJSONObject(0).optInt("se",1):1):0;
    detailAction(actions,"▶  "+(series?"WATCH EPISODE 1":"WATCH NOW"),true,()->launchPlayer(subjectId,name,detailPath,series?firstSe:0,series?1:0,dubs,seasons,""));
-   detailAction(actions,"＋  MY LIST",false,()->new AlertDialog.Builder(this).setTitle("My List").setMessage("My List is not connected to local storage in the native app yet.").setPositiveButton("OK",null).show());
+   detailAction(actions,"＋  MY LIST",false,()->toggleSaved("mylist",subject));
    // Audio language choices from the MovieBox detail response.
    if(dubs.length()>0){detailHeading("Audio Languages");LinearLayout langs=new LinearLayout(this);langs.setPadding(dp(48),0,dp(30),0);content.addView(langs);for(int i=0;i<dubs.length();i++){JSONObject dub=dubs.optJSONObject(i);if(dub==null)continue;String label=dub.optString("lanName",dub.optString("lanCode",dub.optString("title","Audio")));String did=dub.optString("subjectId",subjectId),dpath=dub.optString("detailPath",detailPath);detailAction(langs,label,false,()->launchPlayer(did,name,dpath,series?firstSe:0,series?1:0,dubs,seasons,dub.optString("title",dub.optString("name",name))));}}
    if(!synopsis.isEmpty()){detailHeading("Synopsis");TextView desc=detailText(synopsis,16,0xffcccccc,false);desc.setPadding(dp(48),0,dp(55),dp(8));content.addView(desc);}
