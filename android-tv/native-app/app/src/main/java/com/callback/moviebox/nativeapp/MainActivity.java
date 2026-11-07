@@ -24,6 +24,7 @@ public class MainActivity extends Activity {
  private TextView heroTitle,heroMeta,heroDesc;
  private ImageView heroImage;
  private FrameLayout heroFrame;
+ private static final String PREFS="moviebox_native_library";
  private String detailPath="";
  private ArrayList<View> previousPageViews=null; private int previousScrollY=0; private boolean previousTopVisible=true; private ArrayList<View> homePageViews=null; private String activeSearchKeyword=""; private int nextSearchPage=1; private boolean searchLoading=false,searchHasMore=false; private LinearLayout searchGrid=null,searchCurrentRow=null; private int searchRowItems=0;
  private int dp(float v){return (int)(v*getResources().getDisplayMetrics().density+.5f);}
@@ -45,7 +46,7 @@ public class MainActivity extends Activity {
  private void runApi(java.util.concurrent.Callable<JSONObject> call,java.util.function.Consumer<JSONObject> done){
   content.removeAllViews();FrameLayout loading=new FrameLayout(this);content.addView(loading,new LinearLayout.LayoutParams(-1,Math.max(dp(300),getResources().getDisplayMetrics().heightPixels-dp(66))));
   ProgressBar spinner=new ProgressBar(this);spinner.setIndeterminate(true);if(android.os.Build.VERSION.SDK_INT>=21)spinner.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(RED));loading.addView(spinner,new FrameLayout.LayoutParams(dp(54),dp(54),Gravity.CENTER));
-  long started=System.currentTimeMillis();new Thread(()->{try{JSONObject j=call.call();long wait=Math.max(0,950-(System.currentTimeMillis()-started));runOnUiThread(()->loadingHandler.postDelayed(()->done.accept(j),wait));}catch(Exception e){runOnUiThread(()->showError(e));}}).start();
+  long started=System.currentTimeMillis();new Thread(()->{try{JSONObject j=call.call();long wait=Math.max(0,950-(System.currentTimeMillis()-started));runOnUiThread(()->handler.postDelayed(()->done.accept(j),wait));}catch(Exception e){runOnUiThread(()->showError(e));}}).start();
  }
  private void showError(Exception e){content.removeAllViews();TextView t=txt("MovieBox could not be loaded",24,WHITE,true);t.setPadding(dp(50),dp(50),0,dp(12));content.addView(t);TextView m=txt(String.valueOf(e.getMessage()),15,MUTED,false);m.setPadding(dp(50),0,dp(50),dp(20));content.addView(m);focusText("RETRY",()->loadHome());}
  private JSONObject merged(JSONObject o){JSONObject s=o==null?null:o.optJSONObject("subject");if(s==null)return o==null?new JSONObject():o;JSONObject n=new JSONObject();try{Iterator<String>it=s.keys();while(it.hasNext()){String k=it.next();n.put(k,s.get(k));}it=o.keys();while(it.hasNext()){String k=it.next();n.put(k,o.get(k));}}catch(Exception ignored){}return n;}
