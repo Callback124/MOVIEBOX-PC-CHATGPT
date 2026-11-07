@@ -216,6 +216,14 @@ public class PlayerActivity extends Activity {
         Map<String, String> requestHeaders = new HashMap<>();
         requestHeaders.put("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36");
         requestHeaders.put("Accept", "*/*");
+        // The web player sends playback requests in the MovieBox page context.
+        // Native ExoPlayer must send the same Origin/Referer or CDN hosts may reject
+        // the manifest/segments with HTTP 403/404 even when the URL is valid.
+        if (getIntent().getBooleanExtra("movieBox", false)) {
+            requestHeaders.put("Origin", "https://movieboxph.org");
+            requestHeaders.put("Referer", movieBoxReferer(getIntent().getStringExtra("detailPath")));
+            requestHeaders.put("Accept-Language", "en-US,en;q=0.9");
+        }
         String headerJson = getIntent().getStringExtra("headers");
         if (headerJson != null && !headerJson.isEmpty()) {
             try {
@@ -240,7 +248,16 @@ public class PlayerActivity extends Activity {
         player.addListener(new Player.Listener() {
             @Override
             public void onPlayerError(PlaybackException error) {
-                toast("Cannot play this video: " + error.getErrorCodeName());
+                Throwable cause = error;
+                while (cause.getCause() != null && cause.getCause() != cause) cause = cause.getCause();
+                if (cause instanceof androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException) {
+                    int status = ((androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException) cause).responseCode;
+                    toast("Stream server HTTP " + status + " (" + error.getErrorCodeName() + ")");
+                } else {
+                    String detail = cause.getMessage();
+                    toast("Cannot play this video: " + error.getErrorCodeName()
+                            + (detail == null || detail.trim().isEmpty() ? "" : " — " + detail));
+                }
             }
 
             @Override
