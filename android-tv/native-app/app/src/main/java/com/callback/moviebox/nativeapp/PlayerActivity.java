@@ -291,8 +291,10 @@ public class PlayerActivity extends Activity {
         movieBoxSeason = getIntent().getIntExtra("season", 0);
         movieBoxEpisode = getIntent().getIntExtra("episode", 0);
         String title = getIntent().getStringExtra("title");
-        basePlayerTitle = title == null ? "" : title;
-        originalPlayerTitle = basePlayerTitle;
+        String dubTitle = getIntent().getStringExtra("dubTitle");
+        basePlayerTitle = dubTitle != null && !dubTitle.trim().isEmpty()
+                ? dubTitle.trim() : (title == null ? "" : title);
+        originalPlayerTitle = title == null ? basePlayerTitle : title;
         updateEpisodeSubtitle();
         String format = getIntent().getStringExtra("format");
         long pos = getIntent().getLongExtra("pos", 0L);
