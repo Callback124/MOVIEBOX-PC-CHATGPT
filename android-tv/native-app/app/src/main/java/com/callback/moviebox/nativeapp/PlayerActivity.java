@@ -1071,8 +1071,10 @@ public class PlayerActivity extends Activity {
                         qualityNumber(b.optString("quality", "")), qualityNumber(a.optString("quality", ""))));
                 for (JSONObject item : sortedSources) orderedSources.put(item);
                 if (orderedSources.length() == 0) {
+                    JSONObject dataObject = payload.optJSONObject("data");
+                    String keys = dataObject == null || dataObject.names() == null ? "none" : dataObject.names().toString();
                     String message = payload.optString("message", payload.optString("reason", "No playable stream URLs were returned"));
-                    throw new Exception(message);
+                    throw new Exception(message + " (response data keys: " + keys + ")");
                 }
             } catch (Exception e) { error = e; }
             final Exception finalError = error;
@@ -1114,20 +1116,25 @@ public class PlayerActivity extends Activity {
                 String inheritedKey = inheritedKeys.next();
                 try { meta.put(inheritedKey, inherited.opt(inheritedKey)); } catch (Exception ignored) { }
             }
-            for (String k : new String[]{"resolutions","resolution","quality","label","name","definition","height","format","mimeType","mime","protocol","type"}) {
+            // Keep the same stream metadata fields recognised by renderer/app.js.
+            for (String k : new String[]{"resolutions","resolution","quality","label","name","definition","height",
+                    "format","mimeType","mime","protocol","type","qualityName","definitionName","videoQuality","streamType"}) {
                 if (obj.has(k)) try { meta.put(k, obj.opt(k)); } catch (Exception ignored) { }
             }
             String url = "";
             for (String k : new String[]{"url","src","playUrl","streamUrl","fileUrl","uri","videoUrl","mediaUrl","downloadUrl","masterUrl"}) {
                 String candidate = obj.optString(k, "");
-                if (candidate.startsWith("http")) { url = candidate; break; }
+                if (candidate.matches("(?i)^https?://.+")) { url = candidate; break; }
             }
-            if (!url.isEmpty() && context) addMovieBoxSource(url, key, meta, out);
+            // The web player accepts direct media URLs even when the JSON key is not named "streams".
+            if (!url.isEmpty() && (context || url.matches("(?i).*\\.(m3u8|mpd|mp4|m4v|webm|mov)(?:$|[?#]).*"))) {
+                addMovieBoxSource(url, key, meta, out);
+            }
             java.util.Iterator<String> it = obj.keys();
             while (it.hasNext()) { String child = it.next(); collectMovieBoxSources(obj.opt(child), child, context, meta, out); }
         } else if (value instanceof String) {
             String url = (String) value;
-            if (url.startsWith("http") && (context || url.matches("(?i).*\\.(m3u8|mpd|mp4|m4v|webm)(\\?.*)?$"))) addMovieBoxSource(url, key, inherited, out);
+            if (url.matches("(?i)^https?://.+") && (context || url.matches("(?i).*\\.(m3u8|mpd|mp4|m4v|webm|mov)(?:$|[?#]).*"))) addMovieBoxSource(url, key, inherited, out);
         }
     }
 
