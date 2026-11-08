@@ -14,7 +14,7 @@ import java.util.*;
 
 public class MainActivity extends Activity {
  private final int BG=0xff141414, PANEL=0xff181818, WHITE=0xffffffff, MUTED=0xffc5c5c5, RED=0xffe50914;
- private MovieBoxRepository api;
+ private MovieBoxRepository api; private StoryTvRepository storyApi;
  private FrameLayout root; private LinearLayout content, top; private final ArrayList<View> heroDots=new ArrayList<>();
  private ScrollView pageScroll;
  private JSONArray slides=new JSONArray();
@@ -28,7 +28,7 @@ public class MainActivity extends Activity {
  private String detailPath="";
  private ArrayList<View> previousPageViews=null; private int previousScrollY=0; private boolean previousTopVisible=true; private ArrayList<View> homePageViews=null; private String activeSearchKeyword=""; private int nextSearchPage=1; private boolean searchLoading=false,searchHasMore=false; private LinearLayout searchGrid=null,searchCurrentRow=null; private int searchRowItems=0;
  private int dp(float v){return (int)(v*getResources().getDisplayMetrics().density+.5f);}
- @Override public void onCreate(Bundle b){super.onCreate(b);getWindow().setFlags(1024,1024);getWindow().getDecorView().setSystemUiVisibility(5894|1024|512);api=new MovieBoxRepository(this);buildShell();loadHome();}
+ @Override public void onCreate(Bundle b){super.onCreate(b);getWindow().setFlags(1024,1024);getWindow().getDecorView().setSystemUiVisibility(5894|1024|512);api=new MovieBoxRepository(this);storyApi=new StoryTvRepository();buildShell();if(getSelectedServer()==3)showStoryTvHome();else loadHome();}
  private GradientDrawable bg(int color,int stroke){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(3));if(stroke!=0)d.setStroke(dp(2),stroke);return d;}
  private TextView txt(String s,int size,int color,boolean bold){TextView t=new TextView(this);t.setText(s);t.setTextSize(size);t.setTextColor(color);if(bold)t.setTypeface(android.graphics.Typeface.DEFAULT,android.graphics.Typeface.BOLD);return t;}
  private void buildShell(){
@@ -58,7 +58,7 @@ public class MainActivity extends Activity {
  private String imageUrl(Object value){if(value==null||value==JSONObject.NULL)return "";if(value instanceof String){String v=((String)value).trim();if(v.startsWith("//"))return "https:"+v;if(v.startsWith("http://")||v.startsWith("https://"))return v;return "";}if(value instanceof JSONObject){JSONObject j=(JSONObject)value;String[] keys={"url","src","imageUrl","fileUrl","path","original","large","medium","small","cover","image"};for(String k:keys){String u=imageUrl(j.opt(k));if(!u.isEmpty())return u;}}if(value instanceof JSONArray){JSONArray a=(JSONArray)value;for(int i=0;i<a.length();i++){String u=imageUrl(a.opt(i));if(!u.isEmpty())return u;}}return "";}
  private String year(JSONObject raw){String d=merged(raw).optString("releaseDate",merged(raw).optString("release_date",merged(raw).optString("year","")));java.util.regex.Matcher m=java.util.regex.Pattern.compile("(19|20)\\d{2}").matcher(d);return m.find()?m.group():"";}
  private String description(JSONObject raw){JSONObject o=merged(raw);return o.optString("description",o.optString("introduction",o.optString("overview","")));}
- private void loadHome(){top.setVisibility(View.VISIBLE);if(top.getChildAt(0) instanceof TextView)((TextView)top.getChildAt(0)).setText("MOVIEBOX");if(slideTask!=null)handler.removeCallbacks(slideTask);if(getSelectedServer()!=0){showComingSoonServer();return;}runApi(()->api.home(),j->{content.removeAllViews();JSONObject data=j.optJSONObject("data");JSONArray ops=data==null?null:data.optJSONArray("operatingList");if(ops==null){showError(new Exception("Home feed missing operatingList"));return;}slides=new JSONArray();for(int oi=0;oi<ops.length();oi++){JSONObject op=ops.optJSONObject(oi);if(op==null)continue;JSONObject banner=op.optJSONObject("banner");JSONArray raw=banner==null?null:banner.optJSONArray("items");if(raw==null)raw=op.optJSONArray("bannerItems");if(raw==null)raw=op.optJSONArray("banners");if(raw!=null)for(int k=0;k<raw.length()&&slides.length()<7;k++){JSONObject item=raw.optJSONObject(k);if(item!=null&&(!backdrop(item).isEmpty()||!poster(item).isEmpty()))slides.put(item);}if(slides.length()>=7)break;}if(slides.length()>0)addHero();for(int i=0;i<ops.length();i++){JSONObject op=ops.optJSONObject(i);if(op==null)continue;JSONArray a=op.optJSONArray("subjects");if(a==null||a.length()==0)continue;String heading=op.optString("title",op.optString("name",op.optString("subjectTitle",op.optString("label","Recommended"))));addSection(heading,a);}if(content.getChildCount()==0)content.addView(txt("No MovieBox titles available.",20,WHITE,true));});}
+ private void loadHome(){top.setVisibility(View.VISIBLE);if(top.getChildAt(0) instanceof TextView)((TextView)top.getChildAt(0)).setText("MOVIEBOX");if(slideTask!=null)handler.removeCallbacks(slideTask);if(getSelectedServer()==3){showStoryTvHome();return;}if(getSelectedServer()!=0){showComingSoonServer();return;}runApi(()->api.home(),j->{content.removeAllViews();JSONObject data=j.optJSONObject("data");JSONArray ops=data==null?null:data.optJSONArray("operatingList");if(ops==null){showError(new Exception("Home feed missing operatingList"));return;}slides=new JSONArray();for(int oi=0;oi<ops.length();oi++){JSONObject op=ops.optJSONObject(oi);if(op==null)continue;JSONObject banner=op.optJSONObject("banner");JSONArray raw=banner==null?null:banner.optJSONArray("items");if(raw==null)raw=op.optJSONArray("bannerItems");if(raw==null)raw=op.optJSONArray("banners");if(raw!=null)for(int k=0;k<raw.length()&&slides.length()<7;k++){JSONObject item=raw.optJSONObject(k);if(item!=null&&(!backdrop(item).isEmpty()||!poster(item).isEmpty()))slides.put(item);}if(slides.length()>=7)break;}if(slides.length()>0)addHero();for(int i=0;i<ops.length();i++){JSONObject op=ops.optJSONObject(i);if(op==null)continue;JSONArray a=op.optJSONArray("subjects");if(a==null||a.length()==0)continue;String heading=op.optString("title",op.optString("name",op.optString("subjectTitle",op.optString("label","Recommended"))));addSection(heading,a);}if(content.getChildCount()==0)content.addView(txt("No MovieBox titles available.",20,WHITE,true));});}
  private void addHero(){slideIndex=0;heroDots.clear();heroFrame=new FrameLayout(this);heroFrame.setBackgroundColor(PANEL);content.addView(heroFrame,new LinearLayout.LayoutParams(-1,dp(500)));heroImage=new ImageView(this);heroImage.setScaleType(ImageView.ScaleType.CENTER_CROP);heroFrame.addView(heroImage,new FrameLayout.LayoutParams(-1,-1));LinearLayout bottomShade=new LinearLayout(this);bottomShade.setOrientation(1);bottomShade.setPadding(dp(54),dp(76),dp(54),dp(42));bottomShade.setGravity(Gravity.BOTTOM);bottomShade.setBackgroundColor(0x00000000);heroFrame.addView(bottomShade,new FrameLayout.LayoutParams(-1,-1));heroTitle=txt("",38,WHITE,true);heroTitle.setMaxLines(2);heroTitle.setEllipsize(TextUtils.TruncateAt.END);bottomShade.addView(heroTitle);heroMeta=txt("",14,0xff46d369,true);LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(-1,-2);mp.topMargin=dp(10);bottomShade.addView(heroMeta,mp);heroDesc=txt("",16,WHITE,false);heroDesc.setMaxLines(3);heroDesc.setEllipsize(TextUtils.TruncateAt.END);LinearLayout.LayoutParams dpv=new LinearLayout.LayoutParams(dp(610),-2);dpv.topMargin=dp(10);bottomShade.addView(heroDesc,dpv);LinearLayout actions=new LinearLayout(this);actions.setGravity(Gravity.CENTER_VERTICAL);LinearLayout.LayoutParams ap=new LinearLayout.LayoutParams(-1,dp(52));ap.topMargin=dp(18);bottomShade.addView(actions,ap);TextView watch=button("▶  WATCH",true,()->{JSONObject o=slides.optJSONObject(slideIndex);if(o!=null)openDetail(id(o));});actions.addView(watch,new LinearLayout.LayoutParams(dp(170),dp(48)));TextView more=button("ⓘ  MORE INFO",false,()->{JSONObject o=slides.optJSONObject(slideIndex);if(o!=null)openDetail(id(o));});LinearLayout.LayoutParams moreLp=new LinearLayout.LayoutParams(dp(180),dp(48));moreLp.leftMargin=dp(12);actions.addView(more,moreLp);LinearLayout dots=new LinearLayout(this);dots.setGravity(Gravity.CENTER);FrameLayout.LayoutParams dotLp=new FrameLayout.LayoutParams(-2,dp(38),Gravity.RIGHT|Gravity.BOTTOM);dotLp.setMargins(0,0,dp(48),dp(22));heroFrame.addView(dots,dotLp);for(int i=0;i<slides.length();i++){final int ix=i;TextView dot=txt("●",12,i==0?WHITE:0xffaaaaaa,true);dot.setGravity(Gravity.CENTER);dot.setFocusable(true);dot.setFocusableInTouchMode(false);dot.setBackground(bg(i==0?RED:0x66000000,0));dot.setOnClickListener(v->setSlide(ix));dot.setOnFocusChangeListener((v,f)->{if(f)setSlide(ix);dot.setBackground(bg(f?0xff555555:(slideIndex==ix?RED:0x66000000),f?WHITE:0));});dot.setOnKeyListener((v,key,event)->{if(event.getAction()!=KeyEvent.ACTION_DOWN)return false;if(key==KeyEvent.KEYCODE_DPAD_LEFT){setSlide(Math.max(0,ix-1));heroDots.get(Math.max(0,ix-1)).requestFocus();return true;}if(key==KeyEvent.KEYCODE_DPAD_RIGHT){setSlide(Math.min(heroDots.size()-1,ix+1));heroDots.get(Math.min(heroDots.size()-1,ix+1)).requestFocus();return true;}return false;});heroDots.add(dot);LinearLayout.LayoutParams dlp=new LinearLayout.LayoutParams(dp(26),dp(26));dlp.leftMargin=dp(5);dots.addView(dot,dlp);}setSlide(0);slideTask=()->{if(slides.length()>1){setSlide((slideIndex+1)%slides.length());handler.postDelayed(slideTask,7000);}};if(slides.length()>1)handler.postDelayed(slideTask,7000);heroFrame.setOnKeyListener((v,key,event)->{if(event.getAction()!=KeyEvent.ACTION_DOWN)return false;if(key==KeyEvent.KEYCODE_DPAD_LEFT){setSlide(Math.max(0,slideIndex-1));return true;}if(key==KeyEvent.KEYCODE_DPAD_RIGHT){setSlide(Math.min(slides.length()-1,slideIndex+1));return true;}return false;});}
  private GradientDrawable iconTile(boolean focused){GradientDrawable d=new GradientDrawable(GradientDrawable.Orientation.TL_BR,new int[]{focused?0xff3b1116:0xff20090c,focused?0xff160608:0xff100507});d.setCornerRadius(dp(9));d.setStroke(dp(focused?2:1),focused?0xffff626b:0xff641b23);return d;}
  private class IconView extends View {
@@ -313,7 +313,7 @@ public class MainActivity extends Activity {
    LinearLayout.LayoutParams nameLp=new LinearLayout.LayoutParams(-1,-2);nameLp.topMargin=dp(8);card.addView(name,nameLp);
    card.setOnFocusChangeListener((v,focus)->{card.setBackground(bg(focus?0xff3b171a:0xff202020,focus?0xffff626b:(index==getSelectedServer()?0xffff626b:0xff383838)));card.animate().scaleX(focus?1.06f:1f).scaleY(focus?1.06f:1f).setDuration(100).start();card.setElevation(focus?dp(9):0);});
    card.setOnKeyListener((v,key,event)->{if(event.getAction()==KeyEvent.ACTION_DOWN&&(key==KeyEvent.KEYCODE_DPAD_CENTER||key==KeyEvent.KEYCODE_ENTER)){card.performClick();return true;}return false;});
-   card.setOnClickListener(v->{getSharedPreferences(PREFS,MODE_PRIVATE).edit().putInt(SERVER_PREF,index).apply();dialog.dismiss();if(index==0)loadHome();else showComingSoonServer();});
+   card.setOnClickListener(v->{getSharedPreferences(PREFS,MODE_PRIVATE).edit().putInt(SERVER_PREF,index).apply();dialog.dismiss();if(index==0)loadHome();else if(index==3)showStoryTvHome();else showComingSoonServer();});
    GridLayout.LayoutParams cell=new GridLayout.LayoutParams(GridLayout.spec(i/3),GridLayout.spec(i%3));
    cell.width=dp(142);cell.height=dp(142);cell.setMargins(dp(7),dp(7),dp(7),dp(7));grid.addView(card,cell);
   }
@@ -322,6 +322,59 @@ public class MainActivity extends Activity {
   dialog.setOnShowListener(d->{Window w=dialog.getWindow();if(w!=null)w.setLayout(Math.min(getResources().getDisplayMetrics().widthPixels-dp(70),dp(540)),-2);grid.getChildAt(Math.max(0,Math.min(active,grid.getChildCount()-1))).requestFocus();});
   dialog.show();
  }
+
+ private int storyLangId=2,storyPage=0; private boolean storyLoading=false,storyHasMore=true; private LinearLayout storyGrid;
+ private String[] storyLangNames={"Hindi","Telugu","Tamil","Kannada","Malayalam"};
+ private int[] storyLangIds={2,6,7,8,9};
+ private void showStoryTvHome(){
+  if(slideTask!=null)handler.removeCallbacks(slideTask);
+  top.setVisibility(View.VISIBLE);if(top.getChildAt(0) instanceof TextView)((TextView)top.getChildAt(0)).setText("STORY TV");
+  pageScroll.setOnScrollChangeListener(null);content.removeAllViews();storyPage=0;storyHasMore=true;storyLoading=false;
+  TextView heading=txt("Discover Mini Dramas",27,WHITE,true);heading.setPadding(dp(36),dp(28),dp(30),dp(12));content.addView(heading);
+  HorizontalScrollView languageScroll=new HorizontalScrollView(this);languageScroll.setHorizontalScrollBarEnabled(false);LinearLayout chips=new LinearLayout(this);chips.setGravity(Gravity.CENTER_VERTICAL);chips.setPadding(dp(32),dp(4),dp(32),dp(14));languageScroll.addView(chips);content.addView(languageScroll,new LinearLayout.LayoutParams(-1,-2));
+  for(int i=0;i<storyLangIds.length;i++){final int ix=i;TextView chip=txt(storyLangNames[i],14,storyLangId==storyLangIds[i]?0xff000000:WHITE,true);chip.setGravity(Gravity.CENTER);chip.setPadding(dp(18),dp(10),dp(18),dp(10));chip.setFocusable(true);chip.setBackground(bg(storyLangId==storyLangIds[i]?0xffff626b:PANEL,storyLangId==storyLangIds[i]?RED:0));chip.setOnFocusChangeListener((v,focus)->{if(focus)chip.setBackground(bg(0xff393939,RED));else chip.setBackground(bg(storyLangId==storyLangIds[ix]?0xffff626b:PANEL,storyLangId==storyLangIds[ix]?RED:0));});chip.setOnClickListener(v->changeStoryLanguage(storyLangIds[ix]));LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-2,dp(42));cp.rightMargin=dp(9);chips.addView(chip,cp);}
+  storyGrid=new LinearLayout(this);storyGrid.setOrientation(1);storyGrid.setPadding(dp(30),dp(4),dp(30),dp(24));content.addView(storyGrid,new LinearLayout.LayoutParams(-1,-2));
+  loadStoryPage(0);
+ }
+ private void changeStoryLanguage(int langId){
+  if(storyLangId==langId)return;
+  storyLangId=langId;storyPage=0;storyHasMore=true;storyLoading=false;
+  // Refresh the language chips and feed; the API's language-select endpoint may be unavailable without a session.
+  showStoryTvHome();
+  new Thread(()->{try{storyApi.selectLanguage(langId);}catch(Exception ignored){} }).start();
+ }
+ private JSONObject storyInfo(JSONObject item){JSONObject d=item==null?null:item.optJSONObject("data");JSONObject s=d==null?null:d.optJSONObject("showInfo");return s==null?new JSONObject():s;}
+ private String storyPoster(JSONObject show){String u=show.optString("imageUrl","");if(u.startsWith("//"))u="https:"+u;return u;}
+ private void loadStoryPage(int page){
+  if(storyLoading||(!storyHasMore&&page>0))return;storyLoading=true;
+  if(page==0){TextView loading=txt("Loading Story TV dramas…",15,MUTED,false);loading.setPadding(dp(12),dp(24),0,dp(24));storyGrid.addView(loading);}
+  new Thread(()->{try{
+   JSONObject response=storyApi.explore(page,20);JSONObject data=response.optJSONObject("data");JSONArray rows=data==null?null:data.optJSONArray("content");if(rows==null)rows=new JSONArray();final JSONArray result=rows;
+   runOnUiThread(()->{
+    if(getSelectedServer()!=3)return;
+    if(page==0)storyGrid.removeAllViews();
+    int count=0;for(int i=0;i<result.length();i++){JSONObject item=result.optJSONObject(i);JSONObject show=storyInfo(item);if(show.optString("id").isEmpty())continue;count++;if(count%2==1){LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.TOP);row.setOrientation(0);storyGrid.addView(row,new LinearLayout.LayoutParams(-1,-2));}
+     LinearLayout row=(LinearLayout)storyGrid.getChildAt(storyGrid.getChildCount()-1);addStoryCard(row,show,item);
+    }
+    storyHasMore=result.length()>=20;storyPage=page+1;storyLoading=false;
+    if(page==0&&count==0){TextView empty=txt("No dramas were returned by Story TV.",16,MUTED,false);empty.setPadding(dp(8),dp(24),dp(8),dp(24));storyGrid.addView(empty);}
+    pageScroll.setOnScrollChangeListener((View v,int sx,int sy,int osx,int osy)->{View child=pageScroll.getChildAt(0);if(child!=null&&storyHasMore&&!storyLoading&&child.getBottom()-sy-pageScroll.getHeight()<dp(500))loadStoryPage(storyPage);});
+   });
+  }catch(Exception e){runOnUiThread(()->{storyLoading=false;storyGrid.removeAllViews();TextView error=txt("Story TV feed unavailable: "+e.getMessage(),15,WHITE,false);error.setPadding(dp(12),dp(25),dp(12),dp(15));storyGrid.addView(error);TextView retry=button("RETRY",false,()->loadStoryPage(page));storyGrid.addView(retry,new LinearLayout.LayoutParams(dp(150),dp(46)));});}}).start();
+ }
+ private void addStoryCard(LinearLayout row,JSONObject show,JSONObject raw){
+  LinearLayout card=new LinearLayout(this);card.setOrientation(1);card.setFocusable(true);card.setClickable(true);card.setBackground(bg(PANEL,0));card.setPadding(dp(3),dp(3),dp(3),dp(8));
+  int width=Math.max(dp(120),(getResources().getDisplayMetrics().widthPixels-dp(88))/2);
+  ImageView poster=new ImageView(this);poster.setScaleType(ImageView.ScaleType.CENTER_CROP);poster.setBackgroundColor(0xff252525);card.addView(poster,new LinearLayout.LayoutParams(-1,(int)(width*16f/9f)));
+  String image=storyPoster(show);if(!image.isEmpty())Glide.with(this).load(image).placeholder(new android.graphics.drawable.ColorDrawable(0xff252525)).error(new android.graphics.drawable.ColorDrawable(0xff333333)).centerCrop().into(poster);
+  TextView eps=txt("▶  "+show.optInt("numOfEpisodes",0)+" Episodes",12,WHITE,true);eps.setPadding(dp(8),dp(8),dp(4),dp(2));card.addView(eps);
+  TextView name=txt(show.optString("title","Untitled Drama"),15,WHITE,true);name.setMaxLines(2);name.setEllipsize(TextUtils.TruncateAt.END);name.setPadding(dp(8),dp(3),dp(8),dp(2));card.addView(name);
+  JSONObject meta=show.optJSONObject("metadata");String genre=meta==null?"":meta.optString("genre","");if(genre.isEmpty()&&meta!=null){JSONArray tags=meta.optJSONArray("tags");if(tags!=null){ArrayList<String> vals=new ArrayList<>();for(int i=0;i<tags.length()&&i<3;i++)vals.add(tags.optString(i));genre=android.text.TextUtils.join(" • ",vals);}}
+  TextView tags=txt(genre,11,MUTED,false);tags.setMaxLines(1);tags.setEllipsize(TextUtils.TruncateAt.END);tags.setPadding(dp(8),0,dp(8),0);card.addView(tags);
+  card.setOnFocusChangeListener((v,focus)->{card.setBackground(bg(focus?0xff302024:PANEL,focus?RED:0));card.animate().scaleX(focus?1.035f:1f).scaleY(focus?1.035f:1f).setDuration(100).start();card.setElevation(focus?dp(8):0);});
+  card.setOnClickListener(v->{String title=show.optString("title","Drama");new AlertDialog.Builder(this).setTitle(title).setMessage(show.optInt("numOfEpisodes",0)+" episodes\n\nStory details and playback will be connected in the next step.").setPositiveButton("OK",null).show();});
+  LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);lp.leftMargin=dp(5);lp.rightMargin=dp(5);lp.bottomMargin=dp(16);row.addView(card,lp);
+ }
  private void showComingSoonServer(){
   top.setVisibility(View.VISIBLE);if(slideTask!=null)handler.removeCallbacks(slideTask);content.removeAllViews();
   int selected=getSelectedServer();if(selected<0||selected>=SERVER_NAMES.length)selected=0;
@@ -329,7 +382,7 @@ public class MainActivity extends Activity {
   ImageView logo=new ImageView(this);logo.setScaleType(ImageView.ScaleType.FIT_CENTER);panel.addView(logo,new LinearLayout.LayoutParams(dp(150),dp(150)));
   Glide.with(this).load(SERVER_LOGOS[selected]).placeholder(new android.graphics.drawable.ColorDrawable(0xff242424)).error(new android.graphics.drawable.ColorDrawable(0xff242424)).fitCenter().into(logo);
   TextView name=txt(SERVER_NAMES[selected],27,WHITE,true);name.setGravity(Gravity.CENTER);LinearLayout.LayoutParams np=new LinearLayout.LayoutParams(-1,-2);np.topMargin=dp(18);panel.addView(name,np);
-  TextView soon=txt("COMING SOON",19,RED,true);soon.setGravity(Gravity.CENTER);LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-1,-2);sp.topMargin=dp(12);panel.addView(soon,sp);
+  TextView soon=txt("Homepage is not configured yet.",16,MUTED,true);soon.setGravity(Gravity.CENTER);LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-1,-2);sp.topMargin=dp(12);panel.addView(soon,sp);
   TextView note=txt("This server homepage is being prepared.",14,MUTED,false);note.setGravity(Gravity.CENTER);LinearLayout.LayoutParams noteLp=new LinearLayout.LayoutParams(-1,-2);noteLp.topMargin=dp(8);panel.addView(note,noteLp);
   TextView change=button("CHOOSE ANOTHER SERVER",false,()->showSettings());LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(dp(270),dp(48));cp.topMargin=dp(26);panel.addView(change,cp);
  }
