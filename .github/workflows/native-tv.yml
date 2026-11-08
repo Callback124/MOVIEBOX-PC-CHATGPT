@@ -32,6 +32,31 @@ jobs:
           canvas.alpha_composite(src, ((512-src.width)//2, (512-src.height)//2))
           canvas.convert('RGB').save('android-tv/native-app/app/src/main/res/drawable-nodpi/moviebox_logo_icon.png', quality=95)
           PY
+      - name: Prepare Android TV landscape banner
+        run: |
+          python - <<'PY'
+          from PIL import Image, ImageDraw, ImageFilter
+          src = Image.open('/tmp/moviebox-source-icon.png').convert('RGBA')
+          # Android TV banner is a wide 16:9 canvas; preserve the logo proportions.
+          W, H = 1280, 720
+          canvas = Image.new('RGB', (W, H), (8, 8, 14))
+          # Subtle dark gradient for a clean TV launcher tile.
+          px = canvas.load()
+          for y in range(H):
+              shade = int(8 + 8 * (1 - abs(y - H/2) / (H/2)))
+              for x in range(W):
+                  px[x, y] = (shade, shade, min(24, shade + 10))
+          # Keep the original supplied logo centered, without stretching or cropping.
+          src.thumbnail((900, 500), Image.Resampling.LANCZOS)
+          x = (W - src.width) // 2
+          y = (H - src.height) // 2
+          canvas_rgba = canvas.convert('RGBA')
+          canvas_rgba.alpha_composite(src, (x, y))
+          canvas_rgba.convert('RGB').save(
+              'android-tv/native-app/app/src/main/res/drawable-nodpi/tv_banner.png',
+              quality=95
+          )
+          PY
       - name: Build debug APK
         working-directory: android-tv/native-app
         run: gradle assembleDebug --stacktrace
