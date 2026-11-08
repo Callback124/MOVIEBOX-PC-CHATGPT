@@ -21,6 +21,7 @@ public class StoryTvRepository {
  }
  public JSONObject languages()throws Exception{return request("/userservice/v1/languages","GET",null);}
  public JSONObject selectLanguage(int langId)throws Exception{JSONObject b=new JSONObject();b.put("langId",langId);return request("/userservice/v1/language/select?langId="+langId,"POST",b);}
- public JSONObject explore(int page,int size)throws Exception{return request("/feedservice/v2/explore/shows?page="+page+"&size="+size+"&intCount=0","GET",null);}
+ public JSONObject explore(int page,int size)throws Exception{return explore(page,size,2);}
+ public JSONObject explore(int page,int size,int langId)throws Exception{return request("/feedservice/v2/explore/shows?page="+page+"&size="+size+"&intCount=0&langId="+langId,"GET",null);}
  public JSONObject search(String q)throws Exception{return request("/searchservice/v1/search/"+URLEncoder.encode(q,"UTF-8"),"GET",null);}
 }
