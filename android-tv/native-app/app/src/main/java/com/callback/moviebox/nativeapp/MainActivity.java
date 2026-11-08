@@ -207,8 +207,27 @@ public class MainActivity extends Activity {
    detailAction(actions,"▶  "+(series?"WATCH EPISODE 1":"WATCH NOW"),true,()->launchPlayer(subjectId,name,detailPath,series?firstSe:0,series?1:0,dubs,seasons,""));
    final JSONObject savedSubject=subject;
    detailAction(actions,"＋  MY LIST",false,()->toggleSaved("mylist",savedSubject));
-   // Audio language choices from the MovieBox detail response.
-   if(dubs.length()>0){detailHeading("Audio Languages");LinearLayout langs=new LinearLayout(this);langs.setPadding(dp(48),0,dp(30),0);content.addView(langs);for(int i=0;i<dubs.length();i++){JSONObject dub=dubs.optJSONObject(i);if(dub==null)continue;String label=dub.optString("lanName",dub.optString("lanCode",dub.optString("title","Audio")));String did=dub.optString("subjectId",subjectId),dpath=dub.optString("detailPath",detailPath);detailAction(langs,label,false,()->launchPlayer(did,name,dpath,series?firstSe:0,series?1:0,dubs,seasons,dub.optString("title",dub.optString("name",name))));}}
+   // Audio language choices use a fixed-column grid so no dub chip can overflow horizontally.
+   if(dubs.length()>0){
+    detailHeading("Audio Languages");
+    GridLayout langs=new GridLayout(this);langs.setColumnCount(4);langs.setUseDefaultMargins(false);
+    langs.setPadding(dp(48),0,dp(30),dp(8));
+    content.addView(langs,new LinearLayout.LayoutParams(-1,-2));
+    int dubCell=0;
+    for(int i=0;i<dubs.length();i++){
+     JSONObject dub=dubs.optJSONObject(i);if(dub==null)continue;
+     String label=dub.optString("lanName",dub.optString("lanCode",dub.optString("title","Audio")));
+     String did=dub.optString("subjectId",subjectId),dpath=dub.optString("detailPath",detailPath);
+     String dubTitle=dub.optString("title",dub.optString("name",name));
+     TextView chip=txt(label,14,WHITE,true);chip.setGravity(Gravity.CENTER);chip.setMaxLines(2);chip.setEllipsize(TextUtils.TruncateAt.END);
+     chip.setPadding(dp(8),dp(6),dp(8),dp(6));chip.setFocusable(true);chip.setFocusableInTouchMode(false);
+     chip.setBackground(bg(0xff292929,0xff444444));
+     chip.setOnFocusChangeListener((v,focus)->chip.setBackground(bg(focus?0xff3b171a:0xff292929,focus?RED:0xff444444)));
+     chip.setOnClickListener(v->launchPlayer(did,name,dpath,series?firstSe:0,series?1:0,dubs,seasons,dubTitle));
+     GridLayout.LayoutParams chipLp=new GridLayout.LayoutParams(GridLayout.spec(dubCell/4),GridLayout.spec(dubCell%4,1f));
+     chipLp.width=0;chipLp.height=dp(52);chipLp.setMargins(0,0,dp(10),dp(10));langs.addView(chip,chipLp);dubCell++;
+    }
+   }
    if(!synopsis.isEmpty()){detailHeading("Synopsis");TextView desc=detailText(synopsis,16,0xffcccccc,false);desc.setPadding(dp(48),0,dp(55),dp(8));content.addView(desc);}
    if(stars.length()>0){
     detailHeading("Cast");int castCols=10;int castCount=stars.length();
