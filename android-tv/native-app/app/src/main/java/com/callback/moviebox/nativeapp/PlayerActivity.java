@@ -223,7 +223,8 @@ public class PlayerActivity extends Activity {
         // The web player sends playback requests in the MovieBox page context.
         // Native ExoPlayer must send the same Origin/Referer or CDN hosts may reject
         // the manifest/segments with HTTP 403/404 even when the URL is valid.
-        if (getIntent().getBooleanExtra("storyTv", false)) {\n            requestHeaders.put("Origin", "https://storytv.asia");\n            requestHeaders.put("Referer", "https://storytv.asia/");\n        }\n        if (getIntent().getBooleanExtra("movieBox", false)) {
+        if (getIntent().getBooleanExtra("storyTv", false)) {
+            requestHeaders.put("Origin", "https://storytv.asia");\n            requestHeaders.put("Referer", "https://storytv.asia/");\n        }\n        if (getIntent().getBooleanExtra("movieBox", false)) {
             requestHeaders.put("Origin", "https://movieboxph.org");
             requestHeaders.put("Referer", movieBoxReferer(getIntent().getStringExtra("detailPath")));
             requestHeaders.put("Accept-Language", "en-US,en;q=0.9");
@@ -288,7 +289,8 @@ public class PlayerActivity extends Activity {
         try { sourceVariants = new JSONArray(getIntent().getStringExtra("sources") == null ? "[]" : getIntent().getStringExtra("sources")); } catch (Exception ignored) { sourceVariants = new JSONArray(); }
         try { dubVariants = new JSONArray(getIntent().getStringExtra("dubs") == null ? "[]" : getIntent().getStringExtra("dubs")); } catch (Exception ignored) { dubVariants = new JSONArray(); }
         try { episodeSequence = new JSONArray(getIntent().getStringExtra("episodeSequence") == null ? "[]" : getIntent().getStringExtra("episodeSequence")); } catch (Exception ignored) { episodeSequence = new JSONArray(); }
-        movieBoxMode = getIntent().getBooleanExtra("movieBox", false);\n        storyTvMode = getIntent().getBooleanExtra("storyTv", false);\n        storyTvShowId = getIntent().getStringExtra("storyShowId");\n        storyTvEpisode = getIntent().getIntExtra("storyEpisode", 1);\n        storyTvEpisodeCount = getIntent().getIntExtra("storyEpisodeCount", storyTvEpisode);
+        movieBoxMode = getIntent().getBooleanExtra("movieBox", false);
+        storyTvMode = getIntent().getBooleanExtra("storyTv", false);\n        storyTvShowId = getIntent().getStringExtra("storyShowId");\n        storyTvEpisode = getIntent().getIntExtra("storyEpisode", 1);\n        storyTvEpisodeCount = getIntent().getIntExtra("storyEpisodeCount", storyTvEpisode);
         movieBoxSubjectId = getIntent().getStringExtra("subjectId");
         movieBoxDetailPath = getIntent().getStringExtra("detailPath");
         movieBoxToken = getIntent().getStringExtra("token");
@@ -1389,7 +1391,8 @@ public class PlayerActivity extends Activity {
 
     private String formatEpisodeTitle(String rawTitle) {
         String clean = rawTitle == null ? "" : rawTitle.trim();
-        if (storyTvMode) return clean + " · Episode " + storyTvEpisode;\n        if (!movieBoxMode || episodeSequence.length() == 0 || movieBoxEpisode <= 0) return clean;
+        if (storyTvMode) return clean + " · Episode " + storyTvEpisode;
+        if (!movieBoxMode || episodeSequence.length() == 0 || movieBoxEpisode <= 0) return clean;
         clean = clean.replaceAll("(?i)\\s*[·|—-]?\\s*S\\d{1,2}\\s*E\\d{1,3}\\s*$", "").trim();
         return clean + " · S" + String.format(Locale.US, "%02d", movieBoxSeason)
                 + " E" + String.format(Locale.US, "%02d", movieBoxEpisode);
