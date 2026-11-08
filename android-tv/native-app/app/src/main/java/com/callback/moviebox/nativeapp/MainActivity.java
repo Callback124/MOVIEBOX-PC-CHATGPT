@@ -110,7 +110,7 @@ public class MainActivity extends Activity {
  private void search(String q,int page){
   if(q==null||q.trim().isEmpty())return;
   final String keyword=q.trim();
-  if(page==1){JSONArray old=readCollection("search_history"),next=new JSONArray();next.put(keyword);for(int si=0;si<old.length();si++){String prior=old.optString(si,"");if(!prior.equalsIgnoreCase(keyword)&&!prior.isEmpty()&&next.length()<12)next.put(prior);}getSharedPreferences(PREFS,MODE_PRIVATE).edit().putString("search_history",next.toString()).apply();}
+  if(page==1){JSONArray old=readCollection("search_history"),next=new JSONArray();next.put(keyword);for(int si=0;si<old.length();si++){String prior=old.optString(si,"");if(!prior.equalsIgnoreCase(keyword)&&!prior.isEmpty()&&next.length()<12)next.put(prior);}getSharedPreferences(PREFS,MODE_PRIVATE).edit().putString(scopedKey("search_history"),next.toString()).apply();}
   if(page==1){
    activeSearchKeyword=keyword;nextSearchPage=1;searchLoading=true;searchHasMore=false;searchGrid=null;searchCurrentRow=null;searchRowItems=0;
    content.removeAllViews();TextView loading=txt(getSelectedServer()==3?"Searching Story TV…":"Searching MovieBox…",16,MUTED,false);loading.setPadding(dp(48),dp(28),0,dp(12));content.addView(loading);
@@ -357,7 +357,7 @@ public class MainActivity extends Activity {
    runOnUiThread(()->{
     if(getSelectedServer()!=3)return;
     if(page==0)storyGrid.removeAllViews();
-    int count=0;for(int i=0;i<result.length();i++){JSONObject item=result.optJSONObject(i);JSONObject show=storyInfo(item);if(show.optString("id").isEmpty())continue;count++;if(count%2==1){LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.TOP);row.setOrientation(0);storyGrid.addView(row,new LinearLayout.LayoutParams(-1,-2));}
+    int count=0;for(int i=0;i<result.length();i++){JSONObject item=result.optJSONObject(i);JSONObject show=storyInfo(item);if(show.optString("id").isEmpty())continue;count++;if(count%8==1){LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.TOP);row.setOrientation(0);storyGrid.addView(row,new LinearLayout.LayoutParams(-1,-2));}
      LinearLayout row=(LinearLayout)storyGrid.getChildAt(storyGrid.getChildCount()-1);addStoryCard(row,show,item);
     }
     storyHasMore=result.length()>=50;storyPage=page+1;storyLoading=false;
