@@ -328,9 +328,18 @@ public class MainActivity extends Activity {
   dialog.show();
  }
 
- private int storyLangId=2,storyPage=0,storyRequestId=0,storyRowItems=0; private boolean storyLoading=false,storyHasMore=true; private LinearLayout storyGrid,storyCurrentRow;
+ private int storyLangId=2,storyPage=0,storyRequestId=0,storyRowItems=0; private boolean storyLoading=false,storyHasMore=true; private LinearLayout storyGrid,storyCurrentRow; private View storyLoadingOverlay;
  private String[] storyLangNames={"Hindi","Telugu","Tamil","Kannada","Malayalam"};
  private int[] storyLangIds={2,6,7,8,9};
+
+ private void showStoryLoading(boolean show){
+  if(!show){if(storyLoadingOverlay!=null){root.removeView(storyLoadingOverlay);storyLoadingOverlay=null;}return;}
+  if(storyLoadingOverlay!=null)return;
+  FrameLayout overlay=new FrameLayout(this);overlay.setBackgroundColor(0x66000000);overlay.setClickable(true);
+  ProgressBar spinner=new ProgressBar(this);spinner.setIndeterminate(true);if(android.os.Build.VERSION.SDK_INT>=21)spinner.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(RED));
+  overlay.addView(spinner,new FrameLayout.LayoutParams(dp(54),dp(54),Gravity.CENTER));
+  root.addView(overlay,new FrameLayout.LayoutParams(-1,-1));storyLoadingOverlay=overlay;
+ }
  private void showStoryTvHome(){
   if(slideTask!=null)handler.removeCallbacks(slideTask);
   top.setVisibility(View.VISIBLE);if(top.getChildAt(0) instanceof TextView)((TextView)top.getChildAt(0)).setText("STORY TV");
@@ -352,11 +361,12 @@ public class MainActivity extends Activity {
  private String storyPoster(JSONObject show){String u=show.optString("imageUrl","");if(u.startsWith("//"))u="https:"+u;return u;}
  private void loadStoryPage(int page){
   if(storyLoading||(!storyHasMore&&page>0))return;storyLoading=true;final int requestId=storyRequestId,requestedLang=storyLangId;
-  if(page==0){TextView loading=txt("Loading Story TV dramas…",15,MUTED,false);loading.setPadding(dp(12),dp(24),0,dp(24));storyGrid.addView(loading);}
+  showStoryLoading(true);
   new Thread(()->{try{
    storyApi.selectLanguage(requestedLang);JSONObject response=storyApi.explore(page,50,requestedLang);JSONObject data=response.optJSONObject("data");JSONArray rows=data==null?null:data.optJSONArray("content");if(rows==null)rows=new JSONArray();final JSONArray result=rows;
    runOnUiThread(()->{
     if(getSelectedServer()!=3||requestId!=storyRequestId||requestedLang!=storyLangId)return;
+    showStoryLoading(false);
     if(page==0){storyGrid.removeAllViews();storyRowItems=0;storyCurrentRow=null;}
     int count=0;for(int i=0;i<result.length();i++){JSONObject item=result.optJSONObject(i);JSONObject show=storyInfo(item);if(show.optString("id").isEmpty())continue;count++;if(storyCurrentRow==null||storyRowItems>=6){storyCurrentRow=new LinearLayout(this);storyCurrentRow.setGravity(Gravity.TOP);storyCurrentRow.setOrientation(0);storyGrid.addView(storyCurrentRow,new LinearLayout.LayoutParams(-1,-2));storyRowItems=0;}addStoryCard(storyCurrentRow,show,item);storyRowItems++;}
 
@@ -364,7 +374,7 @@ public class MainActivity extends Activity {
     if(page==0&&count==0){TextView empty=txt("No dramas were returned by Story TV.",16,MUTED,false);empty.setPadding(dp(8),dp(24),dp(8),dp(24));storyGrid.addView(empty);}
     pageScroll.setOnScrollChangeListener((View v,int sx,int sy,int osx,int osy)->{View child=pageScroll.getChildAt(0);if(child!=null&&storyHasMore&&!storyLoading&&child.getBottom()-sy-pageScroll.getHeight()<dp(500))loadStoryPage(storyPage);});
    });
-  }catch(Exception e){runOnUiThread(()->{storyLoading=false;storyGrid.removeAllViews();TextView error=txt("Story TV feed unavailable: "+e.getMessage(),15,WHITE,false);error.setPadding(dp(12),dp(25),dp(12),dp(15));storyGrid.addView(error);TextView retry=button("RETRY",false,()->loadStoryPage(page));storyGrid.addView(retry,new LinearLayout.LayoutParams(dp(150),dp(46)));});}}).start();
+  }catch(Exception e){runOnUiThread(()->{if(requestId!=storyRequestId||requestedLang!=storyLangId)return;showStoryLoading(false);storyLoading=false;storyGrid.removeAllViews();TextView error=txt("Story TV feed unavailable: "+e.getMessage(),15,WHITE,false);error.setPadding(dp(12),dp(25),dp(12),dp(15));storyGrid.addView(error);TextView retry=button("RETRY",false,()->loadStoryPage(page));storyGrid.addView(retry,new LinearLayout.LayoutParams(dp(150),dp(46)));});}}).start();
  }
  private void addStoryCard(LinearLayout row,JSONObject show,JSONObject raw){
   LinearLayout card=new LinearLayout(this);card.setOrientation(1);card.setFocusable(true);card.setClickable(true);card.setBackground(bg(PANEL,0));card.setPadding(dp(3),dp(3),dp(3),dp(8));
@@ -383,30 +393,60 @@ public class MainActivity extends Activity {
   if(value instanceof JSONObject){JSONObject o=(JSONObject)value;ArrayList<String> parts=new ArrayList<>();Iterator<String> keys=o.keys();while(keys.hasNext()){String k=keys.next();String v=storyValue(o.opt(k));if(!v.isEmpty())parts.add(k+": "+v);}return android.text.TextUtils.join(" · ",parts);}
   String text=String.valueOf(value).trim();return text.equals("null")||text.equals("[]")||text.equals("{}")?"":text;
  }
+
  private void openStoryDetail(JSONObject show,JSONObject raw){
   if(previousPageViews==null){previousPageViews=new ArrayList<>();for(int i=0;i<content.getChildCount();i++)previousPageViews.add(content.getChildAt(i));content.removeAllViews();previousScrollY=pageScroll.getScrollY();previousTopVisible=top.getVisibility()==View.VISIBLE;}
-  if(slideTask!=null)handler.removeCallbacks(slideTask);top.setVisibility(View.GONE);pageScroll.setOnScrollChangeListener(null);content.removeAllViews();
-  String name=show.optString("title","Untitled Drama"),image=storyPoster(show);
-  FrameLayout hero=new FrameLayout(this);hero.setBackgroundColor(0xff171717);content.addView(hero,new LinearLayout.LayoutParams(-1,dp(360)));
-  ImageView cover=new ImageView(this);cover.setScaleType(ImageView.ScaleType.CENTER_CROP);cover.setBackgroundColor(0xff252525);hero.addView(cover,new FrameLayout.LayoutParams(-1,-1));
-  if(!image.isEmpty())Glide.with(this).load(image).override(getResources().getDisplayMetrics().widthPixels,dp(360)).centerCrop().dontAnimate().into(cover);
-  View shade=new View(this);shade.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,new int[]{0x11000000,0x55000000,0xff141414}));hero.addView(shade,new FrameLayout.LayoutParams(-1,-1));
-  LinearLayout titleBox=new LinearLayout(this);titleBox.setOrientation(1);titleBox.setGravity(Gravity.BOTTOM);titleBox.setPadding(dp(42),dp(30),dp(42),dp(28));hero.addView(titleBox,new FrameLayout.LayoutParams(-1,-1));
-  TextView titleView=detailText(name,30,WHITE,true);titleView.setMaxLines(2);titleBox.addView(titleView);
-  int episodes=show.optInt("numOfEpisodes",0);
-  JSONObject metadata=show.optJSONObject("metadata");
-  String genre=storyValue(metadata==null?null:metadata.opt("genre"));
-  StringBuilder facts=new StringBuilder();if(episodes>0)facts.append(episodes).append(episodes==1?" Episode":" Episodes");
-  if(!genre.isEmpty()){if(facts.length()>0)facts.append("   •   ");facts.append(genre);}
-  if(facts.length()>0){TextView f=detailText(facts.toString(),16,0xffdddddd,true);f.setPadding(dp(42),dp(10),dp(42),dp(10));content.addView(f);}
-  HashSet<String> displayed=new HashSet<>();displayed.add("id");displayed.add("title");displayed.add("imageUrl");displayed.add("metadata");displayed.add("numOfEpisodes");
-  if(metadata!=null){Iterator<String> mk=metadata.keys();while(mk.hasNext()){String key=mk.next();String value=storyValue(metadata.opt(key));if(value.isEmpty()||key.equalsIgnoreCase("genre"))continue;displayed.add("metadata."+key);LinearLayout row=new LinearLayout(this);row.setOrientation(1);row.setPadding(dp(42),dp(8),dp(42),dp(8));content.addView(row);row.addView(detailText(key.replace('_',' ').toUpperCase(),12,0xffaaaaaa,true));TextView val=detailText(value,15,WHITE,false);val.setMaxLines(5);row.addView(val);}}
-  String[] preferred={"description","introduction","overview","synopsis","tags","actors","cast","director","year","releaseDate","language","status"};
-  for(String key:preferred){if(!show.has(key))continue;String value=storyValue(show.opt(key));if(value.isEmpty())continue;displayed.add(key);detailHeading(key.equals("description")||key.equals("introduction")||key.equals("overview")||key.equals("synopsis")?"Synopsis":key.equals("tags")?"Tags":key.substring(0,1).toUpperCase()+key.substring(1));TextView val=detailText(value,16,0xffdddddd,false);val.setPadding(dp(42),0,dp(42),dp(12));content.addView(val);}
-  Iterator<String> keys=show.keys();while(keys.hasNext()){String key=keys.next();if(displayed.contains(key))continue;String value=storyValue(show.opt(key));if(value.isEmpty())continue;LinearLayout row=new LinearLayout(this);row.setOrientation(1);row.setPadding(dp(42),dp(8),dp(42),dp(8));content.addView(row);row.addView(detailText(key.replace('_',' ').toUpperCase(),12,0xffaaaaaa,true));TextView val=detailText(value,15,WHITE,false);val.setMaxLines(5);row.addView(val);}
-  if(episodes>0){TextView note=detailText("Story TV provides the episode count here; individual episode details are not included in this feed response.",13,MUTED,false);note.setPadding(dp(42),dp(14),dp(42),dp(30));content.addView(note);}
-  TextView back=button("←  BACK TO STORY TV",false,()->onBackPressed());LinearLayout.LayoutParams backLp=new LinearLayout.LayoutParams(dp(250),dp(48));backLp.leftMargin=dp(42);backLp.bottomMargin=dp(32);content.addView(back,backLp);
+  if(slideTask!=null)handler.removeCallbacks(slideTask);top.setVisibility(View.GONE);pageScroll.setOnScrollChangeListener(null);content.removeAllViews();pageScroll.scrollTo(0,0);
+  showStoryLoading(true);final String showId=show.optString("id",raw.optString("showId",""));
+  new Thread(()->{try{JSONObject episodeResponse=storyApi.episodeList(showId);JSONObject episodeData=episodeResponse.optJSONObject("data");if(episodeData==null)episodeData=episodeResponse;final JSONObject episodesInfo=episodeData;runOnUiThread(()->{showStoryLoading(false);renderStoryDetail(show,raw,episodesInfo);});}
+   catch(Exception e){runOnUiThread(()->{showStoryLoading(false);renderStoryDetail(show,raw,new JSONObject());TextView error=detailText("Episode list could not be loaded: "+e.getMessage(),13,0xffff7777,false);error.setPadding(dp(48),dp(8),dp(48),dp(18));content.addView(error);});}
+  }).start();
  }
+ private void renderStoryDetail(JSONObject show,JSONObject raw,JSONObject episodeInfo){
+  content.removeAllViews();String name=show.optString("title","Untitled Drama"),image=storyPoster(show);
+  JSONObject metadata=show.optJSONObject("metadata");int episodeCount=episodeInfo.optInt("epCount",show.optInt("numOfEpisodes",0));
+  String genre=storyValue(metadata==null?null:metadata.opt("genre"));
+  FrameLayout hero=new FrameLayout(this);hero.setBackgroundColor(0xff171717);content.addView(hero,new LinearLayout.LayoutParams(-1,dp(430)));
+  ImageView backdrop=new ImageView(this);backdrop.setScaleType(ImageView.ScaleType.CENTER_CROP);hero.addView(backdrop,new FrameLayout.LayoutParams(-1,-1));
+  if(!image.isEmpty())Glide.with(this).load(image).override(getResources().getDisplayMetrics().widthPixels,dp(430)).centerCrop().dontAnimate().priority(com.bumptech.glide.Priority.IMMEDIATE).into(backdrop);
+  View shade=new View(this);shade.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,new int[]{0x22000000,0x66101010,0xff141414}));hero.addView(shade,new FrameLayout.LayoutParams(-1,-1));
+  LinearLayout body=new LinearLayout(this);body.setGravity(Gravity.BOTTOM);body.setPadding(dp(48),dp(30),dp(48),dp(26));body.setOrientation(0);hero.addView(body,new FrameLayout.LayoutParams(-1,-1));
+  ImageView posterView=new ImageView(this);posterView.setScaleType(ImageView.ScaleType.CENTER_CROP);posterView.setBackground(bg(PANEL,0xff333333));
+  LinearLayout.LayoutParams posterLp=new LinearLayout.LayoutParams(dp(190),dp(285));posterLp.rightMargin=dp(30);body.addView(posterView,posterLp);
+  if(!image.isEmpty())Glide.with(this).load(image).override(dp(380),dp(570)).centerCrop().diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.ALL).into(posterView);
+  LinearLayout info=new LinearLayout(this);info.setOrientation(1);info.setGravity(Gravity.BOTTOM);body.addView(info,new LinearLayout.LayoutParams(0,-2,1));
+  TextView titleView=detailText(name,32,WHITE,true);titleView.setMaxLines(2);info.addView(titleView);
+  LinearLayout meta=new LinearLayout(this);meta.setGravity(Gravity.CENTER_VERTICAL);meta.setPadding(0,dp(10),0,dp(8));info.addView(meta);
+  if(episodeCount>0)meta.addView(detailText(episodeCount+" Episodes",16,0xffdddddd,true));
+  if(!genre.isEmpty())meta.addView(detailText("   "+genre,15,0xffdddddd,false));
+  String synopsis=show.optString("description",show.optString("introduction",show.optString("overview","")));
+  if(!synopsis.isEmpty()){TextView desc=detailText(synopsis,15,0xffeeeeee,false);desc.setMaxLines(4);desc.setEllipsize(TextUtils.TruncateAt.END);LinearLayout.LayoutParams descLp=new LinearLayout.LayoutParams(-1,-2);descLp.topMargin=dp(10);info.addView(desc,descLp);}
+  LinearLayout actions=new LinearLayout(this);actions.setGravity(Gravity.CENTER_VERTICAL);LinearLayout.LayoutParams actionLp=new LinearLayout.LayoutParams(-1,dp(54));actionLp.topMargin=dp(16);info.addView(actions,actionLp);
+  JSONArray episodeRows=episodeInfo.optJSONArray("data");if(episodeRows==null)episodeRows=episodeInfo.optJSONArray("episodes");if(episodeRows==null)episodeRows=new JSONArray();final JSONArray finalEpisodes=episodeRows;
+  final int firstEpisode=finalEpisodes.length()>0?Math.max(1,finalEpisodes.optJSONObject(0)==null?1:finalEpisodes.optJSONObject(0).optInt("index",1)):1;
+  detailAction(actions,"▶  WATCH NOW",true,()->launchStoryEpisode(show,finalEpisodes,firstEpisode));
+  detailAction(actions,"＋  MY LIST",false,()->toggleSaved("mylist",show));
+  if(!synopsis.isEmpty()){detailHeading("Synopsis");TextView desc=detailText(synopsis,16,0xffcccccc,false);desc.setPadding(dp(48),0,dp(55),dp(8));content.addView(desc);}
+  if(metadata!=null){Iterator<String> mk=metadata.keys();while(mk.hasNext()){String key=mk.next();if(key.equalsIgnoreCase("genre"))continue;String value=storyValue(metadata.opt(key));if(value.isEmpty())continue;detailHeading(key.replace('_',' ').toUpperCase());TextView val=detailText(value,15,0xffcccccc,false);val.setPadding(dp(48),0,dp(48),dp(10));content.addView(val);}}
+  if(episodeRows.length()>0){
+   detailHeading("Episodes");
+   TextView episodeSummary=detailText(episodeCount+" episodes  ·  "+episodeInfo.optString("showTitle",name),13,MUTED,false);episodeSummary.setPadding(dp(48),0,dp(48),dp(10));content.addView(episodeSummary);
+   int cols=5;for(int base=0;base<episodeRows.length();base+=cols){LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(dp(48),0,dp(48),dp(8));content.addView(row,new LinearLayout.LayoutParams(-1,-2));
+    for(int i=base;i<Math.min(episodeRows.length(),base+cols);i++){JSONObject ep=episodeRows.optJSONObject(i);if(ep==null)continue;int index=ep.optInt("index",i+1);String epTitle=ep.optString("epTitle","Episode "+index);boolean locked=ep.optBoolean("lock",false),watched=ep.optBoolean("isWtch",false);
+     LinearLayout tile=new LinearLayout(this);tile.setOrientation(1);tile.setGravity(Gravity.CENTER);tile.setFocusable(true);tile.setBackground(bg(0xff202020,0xff383838));TextView number=detailText("EPISODE "+index,13,WHITE,true);number.setGravity(Gravity.CENTER);tile.addView(number);TextView status=detailText(locked?"LOCKED":(watched?"WATCHED":"AVAILABLE"),10,locked?0xffff7777:MUTED,false);status.setGravity(Gravity.CENTER);tile.addView(status);TextView label=detailText(epTitle,10,MUTED,false);label.setGravity(Gravity.CENTER);label.setMaxLines(1);label.setEllipsize(TextUtils.TruncateAt.END);tile.addView(label);
+     tile.setOnFocusChangeListener((v,focus)->tile.setBackground(bg(focus?0xff3b171a:0xff202020,focus?RED:0xff383838)));tile.setOnClickListener(v->launchStoryEpisode(show,finalEpisodes,index));
+     LinearLayout.LayoutParams tileLp=new LinearLayout.LayoutParams(0,dp(76),1);tileLp.rightMargin=dp(8);row.addView(tile,tileLp);
+    }
+   }
+  }else{detailHeading("Episodes");TextView empty=detailText("No episode entries were returned by Story TV for this title.",14,MUTED,false);empty.setPadding(dp(48),0,dp(48),dp(25));content.addView(empty);}
+  TextView back=button("←  BACK TO STORY TV",false,()->onBackPressed());LinearLayout.LayoutParams backLp=new LinearLayout.LayoutParams(dp(250),dp(48));backLp.leftMargin=dp(48);backLp.bottomMargin=dp(32);content.addView(back,backLp);
+ }
+ private void launchStoryEpisode(JSONObject show,JSONArray episodes,int episodeIndex){
+  JSONObject chosen=null;for(int i=0;i<episodes.length();i++){JSONObject ep=episodes.optJSONObject(i);if(ep!=null&&ep.optInt("index",-1)==episodeIndex){chosen=ep;break;}}
+  if(chosen==null){new AlertDialog.Builder(this).setTitle("Episode unavailable").setMessage("Story TV did not return this episode's playback details.").setPositiveButton("OK",null).show();return;}
+  new AlertDialog.Builder(this).setTitle(show.optString("title","Story TV")+" · Episode "+episodeIndex).setMessage(chosen.optString("epTitle","Episode "+episodeIndex)+(chosen.optBoolean("lock",false)?"\\nThis episode is locked.":"\\nEpisode details loaded from Story TV.")).setPositiveButton("OK",null).show();
+ }
+
  private void showComingSoonServer(){
   top.setVisibility(View.VISIBLE);if(slideTask!=null)handler.removeCallbacks(slideTask);content.removeAllViews();
   int selected=getSelectedServer();if(selected<0||selected>=SERVER_NAMES.length)selected=0;
