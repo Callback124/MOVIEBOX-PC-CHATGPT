@@ -88,6 +88,9 @@ public class MainActivity extends Activity {
   TextView h=txt("Search Movies & Series",28,WHITE,true);h.setPadding(dp(50),dp(35),0,dp(20));content.addView(h);
   EditText input=new EditText(this);input.setSingleLine(true);input.setTextColor(WHITE);input.setHintTextColor(MUTED);input.setHint("Search MovieBox…");input.setTextSize(18);input.setPadding(dp(18),0,dp(18),0);input.setBackground(bg(PANEL,0xff555555));LinearLayout.LayoutParams ip=new LinearLayout.LayoutParams(dp(720),dp(58));ip.leftMargin=dp(50);content.addView(input,ip);
   LinearLayout suggestions=new LinearLayout(this);suggestions.setOrientation(1);suggestions.setPadding(dp(50),dp(6),dp(50),dp(8));content.addView(suggestions,new LinearLayout.LayoutParams(dp(820),-2));
+   TextView recentTitle=txt("Recent",20,WHITE,true);recentTitle.setPadding(dp(50),dp(18),0,dp(10));content.addView(recentTitle);
+   LinearLayout recentChips=new LinearLayout(this);recentChips.setPadding(dp(50),0,dp(30),dp(12));content.addView(recentChips,new LinearLayout.LayoutParams(-1,-2));
+   JSONArray recent=readCollection("search_history");for(int ri=0;ri<recent.length();ri++){String word=recent.optString(ri,"");if(word.isEmpty())continue;TextView chip=txt(word,15,WHITE,false);chip.setGravity(Gravity.CENTER);chip.setPadding(dp(18),dp(10),dp(18),dp(10));chip.setBackground(bg(PANEL,0));chip.setFocusable(true);chip.setOnClickListener(v->{input.setText(word);input.setSelection(word.length());search(word,1);});LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-2,dp(46));cp.rightMargin=dp(8);recentChips.addView(chip,cp);}
   TextView hint=txt("Type at least 2 characters for suggestions.",13,MUTED,false);hint.setPadding(dp(50),dp(10),0,0);content.addView(hint);
   input.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence x,int st,int c,int f){}public void onTextChanged(CharSequence x,int st,int before,int count){
    if(suggestionTask!=null)searchHandler.removeCallbacks(suggestionTask);final String q=x.toString().trim();final int request=++suggestionRequest;suggestions.removeAllViews();if(q.length()<2)return;
@@ -102,6 +105,7 @@ public class MainActivity extends Activity {
  private void search(String q,int page){
   if(q==null||q.trim().isEmpty())return;
   final String keyword=q.trim();
+  if(page==1){JSONArray old=readCollection("search_history"),next=new JSONArray();next.put(keyword);for(int si=0;si<old.length();si++){String prior=old.optString(si,"");if(!prior.equalsIgnoreCase(keyword)&&!prior.isEmpty()&&next.length()<12)next.put(prior);}getSharedPreferences(PREFS,MODE_PRIVATE).edit().putString("search_history",next.toString()).apply();}
   if(page==1){
    activeSearchKeyword=keyword;nextSearchPage=1;searchLoading=true;searchHasMore=false;searchGrid=null;searchCurrentRow=null;searchRowItems=0;
    content.removeAllViews();TextView loading=txt("Searching MovieBox…",16,MUTED,false);loading.setPadding(dp(48),dp(28),0,dp(12));content.addView(loading);
@@ -246,13 +250,16 @@ public class MainActivity extends Activity {
  private void toggleSaved(String key,JSONObject item){String itemId=id(item);JSONArray old=readCollection(key),next=new JSONArray();boolean removed=false;for(int i=0;i<old.length();i++){JSONObject o=old.optJSONObject(i);if(o==null)continue;if(id(o).equals(itemId)){removed=true;continue;}next.put(o);}if(!removed)next.put(item);getSharedPreferences(PREFS,MODE_PRIVATE).edit().putString(key,next.toString()).apply();Toast.makeText(this,removed?"Removed from My List":"Added to My List",Toast.LENGTH_SHORT).show();}
  private void showSaved(String key){
   top.setVisibility(View.GONE);if(previousPageViews==null){previousPageViews=new ArrayList<>();for(int i=0;i<content.getChildCount();i++)previousPageViews.add(content.getChildAt(i));previousScrollY=pageScroll.getScrollY();previousTopVisible=true;}
-  content.removeAllViews();TextView h=txt(key.equals("mylist")?"My List":"Watch History",26,WHITE,true);h.setPadding(dp(48),dp(30),0,dp(20));content.addView(h);
-  JSONArray items=readCollection(key);if(items.length()==0){TextView empty=txt(key.equals("mylist")?"Your list is empty. Add titles using + MY LIST.":"No watch history yet. Open a title to add it here.",16,MUTED,false);empty.setPadding(dp(48),dp(12),0,0);content.addView(empty);return;}
+  content.removeAllViews();LinearLayout heading=new LinearLayout(this);heading.setGravity(Gravity.CENTER_VERTICAL);heading.setPadding(dp(48),dp(24),dp(48),dp(16));content.addView(heading,new LinearLayout.LayoutParams(-1,-2));
+  TextView h=txt(key.equals("mylist")?"My List":"Watch History",26,WHITE,true);heading.addView(h,new LinearLayout.LayoutParams(0,-2,1));
+  TextView clear=txt("▢  Clear All",14,0xffff7777,true);clear.setPadding(dp(14),dp(10),dp(14),dp(10));clear.setFocusable(true);heading.addView(clear);clear.setOnClickListener(v->{new AlertDialog.Builder(this).setTitle("Clear all?").setMessage(key.equals("mylist")?"Remove all titles from My List?":"Clear your entire watch history?").setNegativeButton("Cancel",null).setPositiveButton("Clear",(d,w)->{getSharedPreferences(PREFS,MODE_PRIVATE).edit().putString(key,"[]").apply();showSaved(key);}).show();});
+  JSONArray items=readCollection(key);if(items.length()==0){TextView empty=txt(key.equals("mylist")?"Your list is empty. Add titles using + MY LIST.":"No watch history yet. Play a title to add it here.",16,MUTED,false);empty.setPadding(dp(48),dp(12),0,0);content.addView(empty);return;}
   for(int i=0;i<items.length();i++){JSONObject item=items.optJSONObject(i);if(item==null)continue;LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(dp(48),dp(8),dp(48),dp(8));row.setFocusable(true);row.setBackground(bg(PANEL,0));content.addView(row,new LinearLayout.LayoutParams(-1,dp(112)));
    ImageView posterView=new ImageView(this);posterView.setScaleType(ImageView.ScaleType.CENTER_CROP);row.addView(posterView,new LinearLayout.LayoutParams(dp(62),dp(94)));String image=poster(item);if(!image.isEmpty())Glide.with(this).load(image).centerCrop().into(posterView);
    LinearLayout info=new LinearLayout(this);info.setOrientation(1);info.setGravity(Gravity.CENTER_VERTICAL);LinearLayout.LayoutParams ilp=new LinearLayout.LayoutParams(0,-1,1);ilp.leftMargin=dp(18);row.addView(info,ilp);info.addView(txt(title(item),17,WHITE,true));info.addView(txt(year(item),13,MUTED,false));
-   TextView action=txt(key.equals("mylist")?"REMOVE":"OPEN",13,0xffff7777,true);action.setPadding(dp(18),dp(12),dp(18),dp(12));row.addView(action);row.setOnFocusChangeListener((v,focus)->row.setBackground(bg(focus?0xff303030:PANEL,focus?RED:0)));
-   row.setOnClickListener(v->{if(key.equals("mylist")){toggleSaved(key,item);showSaved(key);}else openDetail(id(item));});
+   TextView action=txt("✕",20,0xffff7777,true);action.setGravity(Gravity.CENTER);action.setPadding(dp(16),dp(12),dp(16),dp(12));action.setFocusable(true);row.addView(action);row.setOnFocusChangeListener((v,focus)->row.setBackground(bg(focus?0xff303030:PANEL,focus?RED:0)));
+   View.OnClickListener open=v->openDetail(id(item));info.setOnClickListener(open);posterView.setOnClickListener(open);row.setOnClickListener(open);
+   action.setOnClickListener(v->{JSONArray updated=new JSONArray();for(int k=0;k<items.length();k++){JSONObject entry=items.optJSONObject(k);if(entry!=null&&!id(entry).equals(id(item)))updated.put(entry);}getSharedPreferences(PREFS,MODE_PRIVATE).edit().putString(key,updated.toString()).apply();showSaved(key);});
   }
  }
  private void showSettings(){new AlertDialog.Builder(this).setTitle("Playback server").setMessage("MovieBox playback is connected to the same MovieBox service used by the web app.").setPositiveButton("OK",null).show();}
