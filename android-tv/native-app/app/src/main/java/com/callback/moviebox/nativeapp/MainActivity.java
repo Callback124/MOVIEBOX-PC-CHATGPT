@@ -301,6 +301,7 @@ public class MainActivity extends Activity {
   LinearLayout panel=new LinearLayout(this);panel.setOrientation(1);panel.setPadding(dp(18),dp(12),dp(18),dp(12));
   GridLayout grid=new GridLayout(this);grid.setColumnCount(3);grid.setUseDefaultMargins(false);
   panel.addView(grid,new LinearLayout.LayoutParams(-1,-2));
+  AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Choose Server").setView(panel).setNegativeButton("CLOSE",null).create();
   for(int i=0;i<SERVER_NAMES.length;i++){
    final int index=i;
    LinearLayout card=new LinearLayout(this);card.setOrientation(1);card.setGravity(Gravity.CENTER);card.setFocusable(true);card.setFocusableInTouchMode(false);card.setClickable(true);
@@ -318,7 +319,6 @@ public class MainActivity extends Activity {
   }
   TextView connected=txt(SERVER_NAMES[active]+" server is connected",14,0xff61d98b,true);connected.setGravity(Gravity.CENTER);
   LinearLayout.LayoutParams connectedLp=new LinearLayout.LayoutParams(-1,dp(42));connectedLp.topMargin=dp(6);panel.addView(connected,connectedLp);
-  AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Choose Server").setView(panel).setNegativeButton("CLOSE",null).create();
   dialog.setOnShowListener(d->{Window w=dialog.getWindow();if(w!=null)w.setLayout(Math.min(getResources().getDisplayMetrics().widthPixels-dp(70),dp(540)),-2);grid.getChildAt(Math.max(0,Math.min(active,grid.getChildCount()-1))).requestFocus();});
   dialog.show();
  }
