@@ -373,9 +373,7 @@ public class MainActivity extends Activity {
   String image=storyPoster(show);if(!image.isEmpty())Glide.with(this).load(image).placeholder(new android.graphics.drawable.ColorDrawable(0xff252525)).error(new android.graphics.drawable.ColorDrawable(0xff333333)).centerCrop().into(poster);
   TextView name=txt(show.optString("title","Untitled Drama"),11,WHITE,true);name.setMaxLines(2);name.setEllipsize(TextUtils.TruncateAt.END);name.setPadding(dp(3),dp(5),dp(3),0);card.addView(name);
   card.setOnFocusChangeListener((v,focus)->{card.setBackground(bg(focus?0xff302024:PANEL,focus?RED:0));card.animate().scaleX(focus?1.035f:1f).scaleY(focus?1.035f:1f).setDuration(100).start();card.setElevation(focus?dp(8):0);});
-  card.setOnClickListener(v->{String title=show.optString("title","Drama");new AlertDialog.Builder(this).setTitle(title).setMessage(show.optInt("numOfEpisodes",0)+" episodes
-
-Story details and playback will be connected in the next step.").setPositiveButton("OK",null).show();});
+  card.setOnClickListener(v->{String title=show.optString("title","Drama");new AlertDialog.Builder(this).setTitle(title).setMessage(show.optInt("numOfEpisodes",0)+" episodes\n\nStory details and playback will be connected in the next step.").setPositiveButton("OK",null).show();});
   LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);lp.leftMargin=dp(3);lp.rightMargin=dp(3);lp.bottomMargin=dp(12);row.addView(card,lp);
  }
  private void showComingSoonServer(){
