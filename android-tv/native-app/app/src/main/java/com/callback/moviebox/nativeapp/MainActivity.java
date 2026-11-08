@@ -134,7 +134,7 @@ public class MainActivity extends Activity {
  }
  private void appendSearchItems(JSONArray items){
   if(searchGrid==null){searchGrid=new LinearLayout(this);searchGrid.setOrientation(1);content.addView(searchGrid,new LinearLayout.LayoutParams(-1,-2));}
-  int cols=getSelectedServer()==3?8:10;int gap=dp(8);int horizontal=dp(48);int cardW=Math.max(dp(42),(getResources().getDisplayMetrics().widthPixels-horizontal-gap*(cols-1))/cols);
+  int cols=6;int gap=dp(8);int horizontal=dp(48);int cardW=Math.max(dp(42),(getResources().getDisplayMetrics().widthPixels-horizontal-gap*(cols-1))/cols);
   for(int i=0;i<items.length();i++){
    JSONObject item=items.optJSONObject(i);if(item==null)continue;
    if(searchCurrentRow==null||searchRowItems>=cols){
@@ -343,9 +343,9 @@ public class MainActivity extends Activity {
  private void changeStoryLanguage(int langId){
   if(storyLangId==langId)return;
   storyLangId=langId;storyPage=0;storyHasMore=true;storyLoading=false;storyRequestId++;storyRowItems=0;storyCurrentRow=null;
-  // Refresh the language chips and feed; the API's language-select endpoint may be unavailable without a session.
+  // The feed loader selects this language and fetches its page sequentially.
+  // Do not fire a second language-selection request in parallel: it can race the feed request.
   showStoryTvHome();
-  new Thread(()->{try{storyApi.selectLanguage(langId);}catch(Exception ignored){} }).start();
  }
  private JSONObject storyInfo(JSONObject item){JSONObject d=item==null?null:item.optJSONObject("data");JSONObject s=d==null?null:d.optJSONObject("showInfo");return s==null?new JSONObject():s;}
  private String storyPoster(JSONObject show){String u=show.optString("imageUrl","");if(u.startsWith("//"))u="https:"+u;return u;}
