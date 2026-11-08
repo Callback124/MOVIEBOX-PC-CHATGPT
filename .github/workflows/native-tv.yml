@@ -19,6 +19,19 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
+      - name: Prepare MovieBox launcher icon
+        run: |
+          mkdir -p android-tv/native-app/app/src/main/res/drawable-nodpi
+          curl --fail --location --retry 3 'https://m.media-amazon.com/images/I/412DqGqoiGL.png' -o /tmp/moviebox-source-icon.png
+          python -m pip install --quiet Pillow
+          python - <<'PY'
+          from PIL import Image
+          src = Image.open('/tmp/moviebox-source-icon.png').convert('RGBA')
+          canvas = Image.new('RGBA', (512, 512), (0, 0, 0, 255))
+          src.thumbnail((492, 300), Image.Resampling.LANCZOS)
+          canvas.alpha_composite(src, ((512-src.width)//2, (512-src.height)//2))
+          canvas.convert('RGB').save('android-tv/native-app/app/src/main/res/drawable-nodpi/moviebox_logo_icon.png', quality=95)
+          PY
       - name: Build debug APK
         working-directory: android-tv/native-app
         run: gradle assembleDebug --stacktrace
