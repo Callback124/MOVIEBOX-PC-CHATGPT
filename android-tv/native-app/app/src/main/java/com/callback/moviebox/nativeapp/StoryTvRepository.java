@@ -13,6 +13,10 @@ public class StoryTvRepository {
   c.setRequestMethod(method);c.setConnectTimeout(15000);c.setReadTimeout(20000);
   c.setRequestProperty("Accept","application/json");c.setRequestProperty("Content-Type","application/json");
   c.setRequestProperty("User-Agent","ktor-client");
+  c.setRequestProperty("Authorization","Bearer eyJhbGciOiJIUzI1NiJ9.eyJjcmVhdGVkRGF0ZSI6IkZyaSBKdW4gMTIgMDc6MDQ6MTAgVVRDIDIwMjYiLCJzZXNzaW9uSWQiOiIxNTI0MDExNDMiLCJkZXZpY2VJZCI6IjI4MDhkNDliN2UwOGI3MTYiLCJleHAiOjE3ODE1MDcwNTB9._GKqF_5WtYkgAIJVhkt3L27t9fvgLkFtfgaOLSPsrOA");
+  c.setRequestProperty("appVersion","62");c.setRequestProperty("os","Android 13 (API 33)");
+  c.setRequestProperty("deviceId","a6229bad5c179d51");c.setRequestProperty("platform","0");
+  c.setRequestProperty("iamsinu","iamsinu");c.setRequestProperty("network_type","WIFI");
   if(body!=null){c.setDoOutput(true);try(OutputStream o=c.getOutputStream()){o.write(body.toString().getBytes("UTF-8"));}}
   int status=c.getResponseCode();InputStream in=status>=200&&status<300?c.getInputStream():c.getErrorStream();
   ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1)out.write(b,0,n);
