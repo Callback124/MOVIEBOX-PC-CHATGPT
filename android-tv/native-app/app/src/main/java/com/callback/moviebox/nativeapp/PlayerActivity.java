@@ -224,7 +224,8 @@ public class PlayerActivity extends Activity {
         // Native ExoPlayer must send the same Origin/Referer or CDN hosts may reject
         // the manifest/segments with HTTP 403/404 even when the URL is valid.
         if (getIntent().getBooleanExtra("storyTv", false)) {
-            requestHeaders.put("Origin", "https://storytv.asia");\n            requestHeaders.put("Referer", "https://storytv.asia/");
+            requestHeaders.put("Origin", "https://storytv.asia");
+            requestHeaders.put("Referer", "https://storytv.asia/");
         }
         if (getIntent().getBooleanExtra("movieBox", false)) {
             requestHeaders.put("Origin", "https://movieboxph.org");
