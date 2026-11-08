@@ -114,6 +114,10 @@ public class PlayerActivity extends Activity {
     private int movieBoxSeason = 0;
     private int movieBoxEpisode = 0;
     private boolean movieBoxMode = false;
+    private boolean storyTvMode = false;
+    private String storyTvShowId = "";
+    private int storyTvEpisode = 1;
+    private int storyTvEpisodeCount = 1;
     private boolean resourcesLoading = false;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -219,7 +223,7 @@ public class PlayerActivity extends Activity {
         // The web player sends playback requests in the MovieBox page context.
         // Native ExoPlayer must send the same Origin/Referer or CDN hosts may reject
         // the manifest/segments with HTTP 403/404 even when the URL is valid.
-        if (getIntent().getBooleanExtra("movieBox", false)) {
+        if (getIntent().getBooleanExtra("storyTv", false)) {\n            requestHeaders.put("Origin", "https://storytv.asia");\n            requestHeaders.put("Referer", "https://storytv.asia/");\n        }\n        if (getIntent().getBooleanExtra("movieBox", false)) {
             requestHeaders.put("Origin", "https://movieboxph.org");
             requestHeaders.put("Referer", movieBoxReferer(getIntent().getStringExtra("detailPath")));
             requestHeaders.put("Accept-Language", "en-US,en;q=0.9");
@@ -284,7 +288,7 @@ public class PlayerActivity extends Activity {
         try { sourceVariants = new JSONArray(getIntent().getStringExtra("sources") == null ? "[]" : getIntent().getStringExtra("sources")); } catch (Exception ignored) { sourceVariants = new JSONArray(); }
         try { dubVariants = new JSONArray(getIntent().getStringExtra("dubs") == null ? "[]" : getIntent().getStringExtra("dubs")); } catch (Exception ignored) { dubVariants = new JSONArray(); }
         try { episodeSequence = new JSONArray(getIntent().getStringExtra("episodeSequence") == null ? "[]" : getIntent().getStringExtra("episodeSequence")); } catch (Exception ignored) { episodeSequence = new JSONArray(); }
-        movieBoxMode = getIntent().getBooleanExtra("movieBox", false);
+        movieBoxMode = getIntent().getBooleanExtra("movieBox", false);\n        storyTvMode = getIntent().getBooleanExtra("storyTv", false);\n        storyTvShowId = getIntent().getStringExtra("storyShowId");\n        storyTvEpisode = getIntent().getIntExtra("storyEpisode", 1);\n        storyTvEpisodeCount = getIntent().getIntExtra("storyEpisodeCount", storyTvEpisode);
         movieBoxSubjectId = getIntent().getStringExtra("subjectId");
         movieBoxDetailPath = getIntent().getStringExtra("detailPath");
         movieBoxToken = getIntent().getStringExtra("token");
@@ -1370,7 +1374,7 @@ public class PlayerActivity extends Activity {
     }
 
     private void updateEpisodeControls() {
-        boolean episodic = movieBoxMode && episodeSequence.length() > 0;
+        boolean episodic = (movieBoxMode && episodeSequence.length() > 0) || (storyTvMode && storyTvEpisodeCount > 1);
         if (previousEpisodeBtn != null) {
             previousEpisodeBtn.setVisibility(episodic ? View.VISIBLE : View.GONE);
             previousEpisodeBtn.setEnabled(episodic && hasPreviousEpisode());
@@ -1385,7 +1389,7 @@ public class PlayerActivity extends Activity {
 
     private String formatEpisodeTitle(String rawTitle) {
         String clean = rawTitle == null ? "" : rawTitle.trim();
-        if (!movieBoxMode || episodeSequence.length() == 0 || movieBoxEpisode <= 0) return clean;
+        if (storyTvMode) return clean + " · Episode " + storyTvEpisode;\n        if (!movieBoxMode || episodeSequence.length() == 0 || movieBoxEpisode <= 0) return clean;
         clean = clean.replaceAll("(?i)\\s*[·|—-]?\\s*S\\d{1,2}\\s*E\\d{1,3}\\s*$", "").trim();
         return clean + " · S" + String.format(Locale.US, "%02d", movieBoxSeason)
                 + " E" + String.format(Locale.US, "%02d", movieBoxEpisode);
@@ -1409,6 +1413,41 @@ public class PlayerActivity extends Activity {
         movieBoxEpisode = next.optInt("ep", movieBoxEpisode);
         updateEpisodeSubtitle();
         fetchMovieBoxResources(movieBoxSubjectId, movieBoxDetailPath, movieBoxSeason, movieBoxEpisode, false);
+    }
+
+    private void fetchStoryTvStream(int episodeNumber) {
+        titleView.setText(basePlayerTitle + " · Episode " + episodeNumber + "  •  Loading stream…");
+        new Thread(() -> {
+            HttpURLConnection connection=null;
+            try {
+                int cursor=((episodeNumber-1)/5)*5;
+                String endpoint="https://elitemods-tv.onrender.com/feedservice/v1/episode/metadata/"+URLEncoder.encode(storyTvShowId,"UTF-8")+"?cursor="+cursor+"&dir=NEXT";
+                connection=(HttpURLConnection)new URL(endpoint).openConnection();
+                connection.setRequestMethod("GET");connection.setConnectTimeout(15000);connection.setReadTimeout(25000);
+                connection.setRequestProperty("Authorization","Bearer eyJhbGciOiJIUzI1NiJ9.eyJjcmVhdGVkRGF0ZSI6IkZyaSBKdW4gMTIgMDc6MDQ6MTAgVVRDIDIwMjYiLCJzZXNzaW9uSWQiOiIxNTI0MDExNDMiLCJkZXZpY2VJZCI6IjI4MDhkNDliN2UwOGI3MTYiLCJleHAiOjE3ODE1MDcwNTB9._GKqF_5WtYkgAIJVhkt3L27t9fvgLkFtfgaOLSPsrOA");
+                connection.setRequestProperty("appVersion","62");connection.setRequestProperty("os","Android 13 (API 33)");
+                connection.setRequestProperty("deviceId","a6229bad5c179d51");connection.setRequestProperty("platform","0");
+                connection.setRequestProperty("iamsinu","iamsinu");connection.setRequestProperty("network_type","WIFI");
+                connection.setRequestProperty("Accept","application/json");connection.setRequestProperty("User-Agent","ktor-client");
+                int status=connection.getResponseCode();InputStream input=status>=200&&status<300?connection.getInputStream():connection.getErrorStream();
+                ByteArrayOutputStream output=new ByteArrayOutputStream();byte[] buffer=new byte[8192];int n;while((n=input.read(buffer))!=-1)output.write(buffer,0,n);
+                JSONObject response=new JSONObject(new String(output.toByteArray(),"UTF-8"));
+                if(status<200||status>=300)throw new Exception("Story TV HTTP "+status);
+                JSONArray content=response.optJSONObject("data")==null?new JSONArray():response.optJSONObject("data").optJSONArray("content");
+                JSONObject target=null;if(content!=null)for(int i=0;i<content.length();i++){JSONObject item=content.optJSONObject(i);if(item!=null&&item.optInt("index")==episodeNumber){target=item;break;}}
+                if(target==null)throw new Exception("Episode "+episodeNumber+" stream not found");
+                String stream=target.optString("epsUrl","");if(stream.isEmpty())throw new Exception("Empty stream URL");
+                final String streamUrl=stream;final String episodeName=target.optString("epsTitle","Episode "+episodeNumber);
+                runOnUiThread(() -> {
+                    basePlayerTitle=getIntent().getStringExtra("title");if(basePlayerTitle==null)basePlayerTitle="Story TV";
+                    titleView.setText(basePlayerTitle+" · Episode "+episodeNumber);
+                    MediaItem item=new MediaItem.Builder().setUri(Uri.parse(streamUrl)).setMimeType("application/x-mpegURL")
+                            .setMediaMetadata(new MediaMetadata.Builder().setTitle(episodeName).build()).build();
+                    player.setMediaItem(item);player.prepare();player.setPlayWhenReady(true);updateEpisodeControls();showControls();
+                });
+            } catch(Exception error) { final String message=error.getMessage();runOnUiThread(() -> {titleView.setText(basePlayerTitle+" · Episode "+episodeNumber);toast("Story TV stream failed: "+message);showControls();});}
+            finally {if(connection!=null)connection.disconnect();}
+        }).start();
     }
 
     private void switchSource(JSONObject source) {
