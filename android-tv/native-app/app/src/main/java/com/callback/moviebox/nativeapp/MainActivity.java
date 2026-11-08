@@ -327,22 +327,22 @@ public class MainActivity extends Activity {
   dialog.show();
  }
 
- private int storyLangId=2,storyPage=0; private boolean storyLoading=false,storyHasMore=true; private LinearLayout storyGrid;
+ private int storyLangId=2,storyPage=0,storyRequestId=0,storyRowItems=0; private boolean storyLoading=false,storyHasMore=true; private LinearLayout storyGrid,storyCurrentRow;
  private String[] storyLangNames={"Hindi","Telugu","Tamil","Kannada","Malayalam"};
  private int[] storyLangIds={2,6,7,8,9};
  private void showStoryTvHome(){
   if(slideTask!=null)handler.removeCallbacks(slideTask);
   top.setVisibility(View.VISIBLE);if(top.getChildAt(0) instanceof TextView)((TextView)top.getChildAt(0)).setText("STORY TV");
-  pageScroll.setOnScrollChangeListener(null);content.removeAllViews();storyPage=0;storyHasMore=true;storyLoading=false;
+  pageScroll.setOnScrollChangeListener(null);content.removeAllViews();storyPage=0;storyHasMore=true;storyLoading=false;storyRequestId++;storyRowItems=0;storyCurrentRow=null;
   
-  HorizontalScrollView languageScroll=new HorizontalScrollView(this);languageScroll.setHorizontalScrollBarEnabled(false);LinearLayout chips=new LinearLayout(this);chips.setGravity(Gravity.CENTER_VERTICAL);chips.setPadding(dp(32),dp(4),dp(32),dp(14));languageScroll.addView(chips);content.addView(languageScroll,new LinearLayout.LayoutParams(-1,-2));
+  HorizontalScrollView languageScroll=new HorizontalScrollView(this);languageScroll.setHorizontalScrollBarEnabled(false);languageScroll.setFillViewport(true);LinearLayout chips=new LinearLayout(this);chips.setGravity(Gravity.CENTER);chips.setPadding(dp(24),dp(4),dp(24),dp(14));languageScroll.addView(chips,new HorizontalScrollView.LayoutParams(-1,-2));LinearLayout.LayoutParams languageLp=new LinearLayout.LayoutParams(-1,-2);languageLp.topMargin=dp(66);content.addView(languageScroll,languageLp);
   for(int i=0;i<storyLangIds.length;i++){final int ix=i;TextView chip=txt(storyLangNames[i],14,storyLangId==storyLangIds[i]?0xff000000:WHITE,true);chip.setGravity(Gravity.CENTER);chip.setPadding(dp(18),dp(10),dp(18),dp(10));chip.setFocusable(true);chip.setBackground(bg(storyLangId==storyLangIds[i]?0xffff626b:PANEL,storyLangId==storyLangIds[i]?RED:0));chip.setOnFocusChangeListener((v,focus)->{if(focus)chip.setBackground(bg(0xff393939,RED));else chip.setBackground(bg(storyLangId==storyLangIds[ix]?0xffff626b:PANEL,storyLangId==storyLangIds[ix]?RED:0));});chip.setOnClickListener(v->changeStoryLanguage(storyLangIds[ix]));LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-2,dp(42));cp.rightMargin=dp(9);chips.addView(chip,cp);}
   storyGrid=new LinearLayout(this);storyGrid.setOrientation(1);storyGrid.setPadding(dp(30),dp(4),dp(30),dp(24));content.addView(storyGrid,new LinearLayout.LayoutParams(-1,-2));
   loadStoryPage(0);
  }
  private void changeStoryLanguage(int langId){
   if(storyLangId==langId)return;
-  storyLangId=langId;storyPage=0;storyHasMore=true;storyLoading=false;
+  storyLangId=langId;storyPage=0;storyHasMore=true;storyLoading=false;storyRequestId++;storyRowItems=0;storyCurrentRow=null;
   // Refresh the language chips and feed; the API's language-select endpoint may be unavailable without a session.
   showStoryTvHome();
   new Thread(()->{try{storyApi.selectLanguage(langId);}catch(Exception ignored){} }).start();
@@ -350,16 +350,15 @@ public class MainActivity extends Activity {
  private JSONObject storyInfo(JSONObject item){JSONObject d=item==null?null:item.optJSONObject("data");JSONObject s=d==null?null:d.optJSONObject("showInfo");return s==null?new JSONObject():s;}
  private String storyPoster(JSONObject show){String u=show.optString("imageUrl","");if(u.startsWith("//"))u="https:"+u;return u;}
  private void loadStoryPage(int page){
-  if(storyLoading||(!storyHasMore&&page>0))return;storyLoading=true;
+  if(storyLoading||(!storyHasMore&&page>0))return;storyLoading=true;final int requestId=storyRequestId,requestedLang=storyLangId;
   if(page==0){TextView loading=txt("Loading Story TV dramas…",15,MUTED,false);loading.setPadding(dp(12),dp(24),0,dp(24));storyGrid.addView(loading);}
   new Thread(()->{try{
-   JSONObject response=storyApi.explore(page,50);JSONObject data=response.optJSONObject("data");JSONArray rows=data==null?null:data.optJSONArray("content");if(rows==null)rows=new JSONArray();final JSONArray result=rows;
+   storyApi.selectLanguage(requestedLang);JSONObject response=storyApi.explore(page,50,requestedLang);JSONObject data=response.optJSONObject("data");JSONArray rows=data==null?null:data.optJSONArray("content");if(rows==null)rows=new JSONArray();final JSONArray result=rows;
    runOnUiThread(()->{
-    if(getSelectedServer()!=3)return;
-    if(page==0)storyGrid.removeAllViews();
-    int count=0;for(int i=0;i<result.length();i++){JSONObject item=result.optJSONObject(i);JSONObject show=storyInfo(item);if(show.optString("id").isEmpty())continue;count++;if(count%8==1){LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.TOP);row.setOrientation(0);storyGrid.addView(row,new LinearLayout.LayoutParams(-1,-2));}
-     LinearLayout row=(LinearLayout)storyGrid.getChildAt(storyGrid.getChildCount()-1);addStoryCard(row,show,item);
-    }
+    if(getSelectedServer()!=3||requestId!=storyRequestId||requestedLang!=storyLangId)return;
+    if(page==0){storyGrid.removeAllViews();storyRowItems=0;storyCurrentRow=null;}
+    int count=0;for(int i=0;i<result.length();i++){JSONObject item=result.optJSONObject(i);JSONObject show=storyInfo(item);if(show.optString("id").isEmpty())continue;count++;if(storyCurrentRow==null||storyRowItems>=6){storyCurrentRow=new LinearLayout(this);storyCurrentRow.setGravity(Gravity.TOP);storyCurrentRow.setOrientation(0);storyGrid.addView(storyCurrentRow,new LinearLayout.LayoutParams(-1,-2));storyRowItems=0;}addStoryCard(storyCurrentRow,show,item);storyRowItems++;}
+
     storyHasMore=result.length()>=50;storyPage=page+1;storyLoading=false;
     if(page==0&&count==0){TextView empty=txt("No dramas were returned by Story TV.",16,MUTED,false);empty.setPadding(dp(8),dp(24),dp(8),dp(24));storyGrid.addView(empty);}
     pageScroll.setOnScrollChangeListener((View v,int sx,int sy,int osx,int osy)->{View child=pageScroll.getChildAt(0);if(child!=null&&storyHasMore&&!storyLoading&&child.getBottom()-sy-pageScroll.getHeight()<dp(500))loadStoryPage(storyPage);});
@@ -368,13 +367,13 @@ public class MainActivity extends Activity {
  }
  private void addStoryCard(LinearLayout row,JSONObject show,JSONObject raw){
   LinearLayout card=new LinearLayout(this);card.setOrientation(1);card.setFocusable(true);card.setClickable(true);card.setBackground(bg(PANEL,0));card.setPadding(dp(3),dp(3),dp(3),dp(8));
-  int width=Math.max(dp(42),(getResources().getDisplayMetrics().widthPixels-dp(60)-dp(6)*7)/8);
+  int width=Math.max(dp(42),(getResources().getDisplayMetrics().widthPixels-dp(60)-dp(6)*5)/6);
   ImageView poster=new ImageView(this);poster.setScaleType(ImageView.ScaleType.CENTER_CROP);poster.setBackgroundColor(0xff252525);card.addView(poster,new LinearLayout.LayoutParams(-1,(int)(width*16f/9f)));
   String image=storyPoster(show);if(!image.isEmpty())Glide.with(this).load(image).placeholder(new android.graphics.drawable.ColorDrawable(0xff252525)).error(new android.graphics.drawable.ColorDrawable(0xff333333)).centerCrop().into(poster);
   TextView name=txt(show.optString("title","Untitled Drama"),11,WHITE,true);name.setMaxLines(2);name.setEllipsize(TextUtils.TruncateAt.END);name.setPadding(dp(3),dp(5),dp(3),0);card.addView(name);
   card.setOnFocusChangeListener((v,focus)->{card.setBackground(bg(focus?0xff302024:PANEL,focus?RED:0));card.animate().scaleX(focus?1.035f:1f).scaleY(focus?1.035f:1f).setDuration(100).start();card.setElevation(focus?dp(8):0);});
   card.setOnClickListener(v->{String title=show.optString("title","Drama");new AlertDialog.Builder(this).setTitle(title).setMessage(show.optInt("numOfEpisodes",0)+" episodes\n\nStory details and playback will be connected in the next step.").setPositiveButton("OK",null).show();});
-  LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);lp.leftMargin=dp(3);lp.rightMargin=dp(3);lp.bottomMargin=dp(12);row.addView(card,lp);
+  LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(width,-2);lp.leftMargin=dp(3);lp.rightMargin=dp(3);lp.bottomMargin=dp(12);row.addView(card,lp);
  }
  private void showComingSoonServer(){
   top.setVisibility(View.VISIBLE);if(slideTask!=null)handler.removeCallbacks(slideTask);content.removeAllViews();
