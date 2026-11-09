@@ -114,7 +114,8 @@ public class MainActivity extends Activity {
   if(word.trim().isEmpty())word=item.optString("keyword",item.optString("word",item.optString("text",item.optString("title",item.optString("name","")))));
   return word==null?"":word.trim();
  }
- private void showSearch(){\n  if(getSelectedServer()==2){Toast.makeText(this,"Lookr search endpoint was not included in the API details.",Toast.LENGTH_LONG).show();return;}
+ private void showSearch(){
+  if(getSelectedServer()==2){Toast.makeText(this,"Lookr search endpoint was not included in the API details.",Toast.LENGTH_LONG).show();return;}
   if(homePageViews==null){homePageViews=new ArrayList<>();for(int i=0;i<content.getChildCount();i++)homePageViews.add(content.getChildAt(i));}
   top.setVisibility(View.GONE);content.removeAllViews();
   final boolean storySearch=getSelectedServer()==3;final boolean freeReelsSearch=getSelectedServer()==4;
@@ -220,7 +221,8 @@ public class MainActivity extends Activity {
  private TextView detailText(String value,int size,int color,boolean bold){TextView t=txt(value,size,color,bold);t.setFocusable(false);return t;}
  private void detailHeading(String label){TextView h=detailText(label,21,WHITE,true);h.setPadding(dp(48),dp(26),dp(30),dp(12));content.addView(h);}
  private void detailAction(LinearLayout row,String label,boolean primary,Runnable action){TextView v=button(label,primary,action);v.setTextSize(15);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(dp(178),dp(48));p.rightMargin=dp(12);row.addView(v,p);}
- private void openDetail(String subjectId){\n  if(getSelectedServer()==2){openLookrDetail(subjectId);return;}
+ private void openDetail(String subjectId){
+  if(getSelectedServer()==2){openLookrDetail(subjectId);return;}
   if(previousPageViews==null){previousPageViews=new ArrayList<>();for(int i=0;i<content.getChildCount();i++)previousPageViews.add(content.getChildAt(i));content.removeAllViews();previousScrollY=pageScroll.getScrollY();previousTopVisible=top.getVisibility()==View.VISIBLE;}
   if(slideTask!=null)handler.removeCallbacks(slideTask);top.setVisibility(View.GONE);
   runApi(()->api.detail(subjectId),j->{
@@ -653,8 +655,8 @@ public class MainActivity extends Activity {
   new Thread(()->{try{JSONObject response=lookrApi.feed(tag,sub,op,page,10);JSONArray items=LookrRepository.items(response);JSONObject pager=LookrRepository.pager(response);boolean more=pager.optBoolean("hasMore",items.length()>=10);int nextPage=pager.optInt("nextPage",page+1);if(nextPage<=page)nextPage=page+1;final boolean has=more;final int following=nextPage;runOnUiThread(()->{if(getSelectedServer()!=2||request!=lookrRequest)return;if(lookrLoader!=null&&lookrLoader.getParent()==lookrGrid)lookrGrid.removeView(lookrLoader);if(!next){lookrGrid.removeAllViews();lookrRow=null;lookrRowCount=0;lookrRank=1;}appendLookrItems(items,page);lookrPage=following;lookrHasMore=has;lookrLoading=false;lookrGrid.post(()->{View child=pageScroll.getChildAt(0);if(getSelectedServer()==2&&lookrHasMore&&!lookrLoading&&child!=null&&child.getBottom()-pageScroll.getScrollY()-pageScroll.getHeight()<dp(520))loadLookrPage(true);});});}catch(Exception e){runOnUiThread(()->{if(request!=lookrRequest)return;lookrLoading=false;if(lookrLoader!=null&&lookrLoader.getParent()==lookrGrid)lookrGrid.removeView(lookrLoader);TextView error=txt("Lookr feed unavailable: "+e.getMessage(),14,WHITE,false);error.setPadding(dp(30),dp(18),dp(30),dp(12));lookrGrid.addView(error);if(!next)focusText("RETRY",()->loadLookrPage(false));});}}).start();
  }
  private void appendLookrItems(JSONArray items,int page){
-  int width=Math.max(dp(90),(getResources().getDisplayMetrics().widthPixels-dp(54))/2);int height=(int)(width/0.70f);
-  for(int i=0;i<items.length();i++){JSONObject item=items.optJSONObject(i);if(item==null)continue;if(lookrRow==null||lookrRowCount>=2){lookrRow=new LinearLayout(this);lookrRow.setGravity(Gravity.TOP);lookrRow.setOrientation(0);lookrGrid.addView(lookrRow,new LinearLayout.LayoutParams(-1,-2));lookrRowCount=0;}
+  int columns=6;int width=Math.max(dp(72),(getResources().getDisplayMetrics().widthPixels-dp(92))/columns);int height=(int)(width/0.70f);
+  for(int i=0;i<items.length();i++){JSONObject item=items.optJSONObject(i);if(item==null)continue;if(lookrRow==null||lookrRowCount>=6){lookrRow=new LinearLayout(this);lookrRow.setGravity(Gravity.TOP);lookrRow.setOrientation(0);lookrGrid.addView(lookrRow,new LinearLayout.LayoutParams(-1,-2));lookrRowCount=0;}
    FrameLayout card=new FrameLayout(this);card.setFocusable(true);card.setClickable(true);card.setBackground(bg(0xff171a22,0));LinearLayout column=new LinearLayout(this);column.setOrientation(1);card.addView(column,new FrameLayout.LayoutParams(-1,-2));
    FrameLayout posterFrame=new FrameLayout(this);posterFrame.setBackgroundColor(0xff252a33);column.addView(posterFrame,new LinearLayout.LayoutParams(-1,height));ImageView poster=new ImageView(this);poster.setScaleType(ImageView.ScaleType.CENTER_CROP);posterFrame.addView(poster,new FrameLayout.LayoutParams(-1,-1));String image=item.optString("cover","");if(image.startsWith("//"))image="https:"+image;if(!image.isEmpty())Glide.with(this).load(image).override(width*2,height*2).placeholder(new android.graphics.drawable.ColorDrawable(0xff252a33)).centerCrop().dontAnimate().into(poster);
    TextView rank=txt(String.valueOf((page-1)*10+i+1),13,WHITE,true);rank.setGravity(Gravity.CENTER);rank.setBackground(bg(RED,0));FrameLayout.LayoutParams rp=new FrameLayout.LayoutParams(dp(34),dp(34),Gravity.TOP|Gravity.LEFT);rp.setMargins(dp(8),dp(8),0,0);posterFrame.addView(rank,rp);
