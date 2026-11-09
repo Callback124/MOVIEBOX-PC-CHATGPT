@@ -168,7 +168,13 @@ public class MainActivity extends Activity {
     });
     pageScroll.post(()->{View child=pageScroll.getChildAt(0);if(child!=null&&searchHasMore&&!searchLoading&&child.getBottom()-pageScroll.getScrollY()-pageScroll.getHeight()<dp(650))search(activeSearchKeyword,nextSearchPage);});
    });
-  }catch(Exception e){runOnUiThread(()->{searchLoading=false;if(requestedPage==1)content.removeAllViews();TextView error=txt("Search failed: "+e.getMessage(),16,WHITE,false);error.setPadding(dp(48),dp(28),dp(48),dp(12));content.addView(error);focusText("RETRY SEARCH",()->search(keyword,requestedPage));});}}).start();
+  }catch(Exception e){runOnUiThread(()->{
+   if(!keyword.equals(activeSearchKeyword)||generation!=storySearchGeneration)return;
+   searchLoading=false;
+   if(requestedPage==1)content.removeAllViews();
+   TextView error=txt("Search failed: "+e.getMessage(),16,WHITE,false);error.setPadding(dp(48),dp(28),dp(48),dp(12));content.addView(error);
+   focusText("RETRY SEARCH",()->search(keyword,requestedPage));
+  });}}).start();
  }
  private void appendSearchItems(JSONArray items){
   if(searchGrid==null){searchGrid=new LinearLayout(this);searchGrid.setOrientation(1);content.addView(searchGrid,new LinearLayout.LayoutParams(-1,-2));}
