@@ -683,7 +683,7 @@ public class MainActivity extends Activity {
   JSONArray seasons=resource.optJSONArray("seasons");if(seasons==null)seasons=new JSONArray();final JSONArray lookrSeasons=seasons;
   JSONArray dubs=subject.optJSONArray("dubs");if(dubs==null)dubs=new JSONArray();
   JSONArray stars=resource.optJSONArray("stars");if(stars==null)stars=subject.optJSONArray("stars");if(stars==null)stars=new JSONArray();
-  boolean episodic=lookrSeasons.length()>0||!"Movie".equalsIgnoreCase(subject.optString("subjectType",fallback.optString("subjectType","Movie")));
+  String lookrType=subject.optString("subjectType",fallback.optString("subjectType","")).trim();String lookrTypeLower=lookrType.toLowerCase(Locale.ROOT);boolean explicitSeries=lookrTypeLower.equals("series")||lookrTypeLower.equals("tv")||lookrTypeLower.equals("drama")||lookrTypeLower.equals("2")||lookrTypeLower.equals("4");boolean episodic;if("Movies".equalsIgnoreCase(lookrTag)){episodic=false;}else if("Series".equalsIgnoreCase(lookrTag)||"Short TV".equalsIgnoreCase(lookrTag)){episodic=true;}else{episodic=lookrSeasons.length()>0||explicitSeries;}
   saveCollection("history",fallback.length()>0?fallback:subject);
 
   FrameLayout hero=new FrameLayout(this);hero.setBackgroundColor(0xff171717);content.addView(hero,new LinearLayout.LayoutParams(-1,dp(430)));
@@ -705,7 +705,7 @@ public class MainActivity extends Activity {
   if(!genre.isEmpty()){TextView g=detailText(genre,14,0xffcccccc,false);g.setMaxLines(2);info.addView(g);}
   if(!synopsis.isEmpty()){TextView desc=detailText(synopsis,15,0xffeeeeee,false);desc.setMaxLines(4);desc.setEllipsize(TextUtils.TruncateAt.END);LinearLayout.LayoutParams dlp=new LinearLayout.LayoutParams(-1,-2);dlp.topMargin=dp(10);info.addView(desc,dlp);}
   int firstSeason=1,firstCount=1;if(lookrSeasons.length()>0){JSONObject se=lookrSeasons.optJSONObject(0);if(se!=null){firstSeason=se.optInt("se",se.optInt("season",1));firstCount=Math.max(1,se.optInt("maxEp",se.optInt("maxEpisode",se.optInt("episodeCount",se.optInt("totalEpisodes",1)))));}}
-  final int initialSeason=firstSeason,initialCount=firstCount;
+  final int initialSeason=episodic?firstSeason:0,initialCount=episodic?firstCount:0;
   LinearLayout actions=new LinearLayout(this);actions.setGravity(Gravity.CENTER_VERTICAL);LinearLayout.LayoutParams al=new LinearLayout.LayoutParams(-1,dp(54));al.topMargin=dp(16);info.addView(actions,al);
   detailAction(actions,episodic?"▶  WATCH EPISODE 1":"▶  WATCH NOW",true,()->launchLookrPlayer(subjectId,name,initialSeason,episodic?1:0,initialCount));
   detailAction(actions,"＋  MY LIST",false,()->toggleSaved("mylist",fallback.length()>0?fallback:subject));
