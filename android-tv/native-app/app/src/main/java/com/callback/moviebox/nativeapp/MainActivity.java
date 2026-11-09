@@ -406,21 +406,21 @@ public class MainActivity extends Activity {
   ImageView posterView=new ImageView(this);posterView.setScaleType(ImageView.ScaleType.CENTER_CROP);posterView.setBackground(bg(PANEL,0xff333333));
   LinearLayout.LayoutParams posterLp=new LinearLayout.LayoutParams(dp(190),dp(285));posterLp.rightMargin=dp(30);body.addView(posterView,posterLp);
   if(!image.isEmpty())Glide.with(this).load(image).override(dp(380),dp(570)).centerCrop().diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.ALL).into(posterView);
-  LinearLayout info=new LinearLayout(this);info.setOrientation(1);info.setGravity(Gravity.BOTTOM);body.addView(info,new LinearLayout.LayoutParams(0,-2,1));
-  TextView titleView=detailText(name,32,WHITE,true);titleView.setMaxLines(2);info.addView(titleView);
-  LinearLayout meta=new LinearLayout(this);meta.setGravity(Gravity.CENTER_VERTICAL);meta.setPadding(0,dp(10),0,dp(8));info.addView(meta);
+  LinearLayout infoPanel=new LinearLayout(this);infoPanel.setOrientation(1);infoPanel.setGravity(Gravity.BOTTOM);body.addView(infoPanel,new LinearLayout.LayoutParams(0,-2,1));
+  TextView titleView=detailText(name,32,WHITE,true);titleView.setMaxLines(2);infoPanel.addView(titleView);
+  LinearLayout meta=new LinearLayout(this);meta.setGravity(Gravity.CENTER_VERTICAL);meta.setPadding(0,dp(10),0,dp(8));infoPanel.addView(meta);
   if(episodeCount>0)meta.addView(detailText(episodeCount+" Episodes",16,0xffdddddd,true));
   if(!genre.isEmpty())meta.addView(detailText("   "+genre,15,0xffdddddd,false));
-  String synopsis=info.optString("desc","");
-  if(!synopsis.isEmpty()){TextView desc=detailText(synopsis,15,0xffeeeeee,false);desc.setMaxLines(4);desc.setEllipsize(TextUtils.TruncateAt.END);LinearLayout.LayoutParams descLp=new LinearLayout.LayoutParams(-1,-2);descLp.topMargin=dp(10);info.addView(desc,descLp);}
-  LinearLayout actions=new LinearLayout(this);actions.setGravity(Gravity.CENTER_VERTICAL);LinearLayout.LayoutParams actionLp=new LinearLayout.LayoutParams(-1,dp(54));actionLp.topMargin=dp(16);info.addView(actions,actionLp);
+  String synopsis=((JSONObject)info).optString("desc","");
+  if(!synopsis.isEmpty()){TextView desc=detailText(synopsis,15,0xffeeeeee,false);desc.setMaxLines(4);desc.setEllipsize(TextUtils.TruncateAt.END);LinearLayout.LayoutParams descLp=new LinearLayout.LayoutParams(-1,-2);descLp.topMargin=dp(10);infoPanel.addView(desc,descLp);}
+  LinearLayout actions=new LinearLayout(this);actions.setGravity(Gravity.CENTER_VERTICAL);LinearLayout.LayoutParams actionLp=new LinearLayout.LayoutParams(-1,dp(54));actionLp.topMargin=dp(16);infoPanel.addView(actions,actionLp);
   final JSONArray finalEpisodes=episodes;
   final int firstEpisode=finalEpisodes.length()>0?Math.max(1,finalEpisodes.optJSONObject(0)==null?1:finalEpisodes.optJSONObject(0).optInt("index",1)):1;
   detailAction(actions,"▶  WATCH NOW",true,()->launchFreeReelsEpisode(info,finalEpisodes,firstEpisode));
   detailAction(actions,"＋  MY LIST",false,()->toggleSaved("mylist",info));
   if(!synopsis.isEmpty()){detailHeading("Synopsis");TextView desc=detailText(synopsis,16,0xffcccccc,false);desc.setPadding(dp(48),0,dp(55),dp(8));content.addView(desc);}
   if(metadata!=null){Iterator<String> mk=metadata.keys();while(mk.hasNext()){String key=mk.next();if(key.equalsIgnoreCase("genre"))continue;String value=storyValue(metadata.opt(key));if(value.isEmpty())continue;detailHeading(key.replace('_',' ').toUpperCase());TextView val=detailText(value,15,0xffcccccc,false);val.setPadding(dp(48),0,dp(48),dp(10));content.addView(val);}}
-  if(episodeRows.length()>0){
+  if(finalEpisodes.length()>0){
    detailHeading("Episodes");
    TextView episodeSummary=detailText(episodeCount+" episodes  ·  "+name,13,MUTED,false);episodeSummary.setPadding(dp(48),0,dp(48),dp(10));content.addView(episodeSummary);
    HorizontalScrollView rangeScroll=new HorizontalScrollView(this);rangeScroll.setHorizontalScrollBarEnabled(false);LinearLayout rangeTabs=new LinearLayout(this);rangeTabs.setGravity(Gravity.CENTER_VERTICAL);rangeScroll.addView(rangeTabs,new HorizontalScrollView.LayoutParams(-2,dp(48)));LinearLayout.LayoutParams rangeLp=new LinearLayout.LayoutParams(-1,dp(52));rangeLp.leftMargin=dp(48);rangeLp.rightMargin=dp(48);content.addView(rangeScroll,rangeLp);
