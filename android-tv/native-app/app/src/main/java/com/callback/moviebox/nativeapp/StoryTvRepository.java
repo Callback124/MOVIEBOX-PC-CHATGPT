@@ -29,5 +29,8 @@ public class StoryTvRepository {
  public JSONObject explore(int page,int size,int langId)throws Exception{return request("/feedservice/v2/explore/shows?page="+page+"&size="+size+"&intCount=0&langId="+langId,"GET",null);}
  public JSONObject episodeList(String showId)throws Exception{return request("/feedservice/v1/episode/list/"+URLEncoder.encode(showId,"UTF-8"),"GET",null);}
  public JSONObject episodeMetadata(String showId,Integer cursor)throws Exception{String path="/feedservice/v1/episode/metadata/"+URLEncoder.encode(showId,"UTF-8");if(cursor!=null)path+="?cursor="+cursor+"&dir=NEXT";return request(path,"GET",null);}
- public JSONObject search(String q)throws Exception{return request("/searchservice/v1/search/"+URLEncoder.encode(q,"UTF-8"),"GET",null);}
+ public JSONObject search(String q)throws Exception{return search(q,1,50);}
+ public JSONObject search(String q,int page,int size)throws Exception{
+  return request("/searchservice/v1/search/"+URLEncoder.encode(q,"UTF-8")+"?page="+Math.max(1,page)+"&size="+Math.max(1,size),"GET",null);
+ }
 }
