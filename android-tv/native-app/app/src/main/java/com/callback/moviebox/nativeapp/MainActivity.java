@@ -83,8 +83,37 @@ public class MainActivity extends Activity {
  private void focusText(String s,Runnable r){TextView v=txt(s,16,RED,true);v.setPadding(dp(50),dp(18),dp(50),dp(18));v.setFocusable(true);v.setOnClickListener(w->r.run());content.addView(v);}
  private Handler searchHandler=new Handler(Looper.getMainLooper()); private Runnable suggestionTask; private int suggestionRequest=0;
  private JSONArray searchArray(JSONObject response){JSONObject d=response==null?null:response.optJSONObject("data");if(d==null)return new JSONArray();JSONArray a=d.optJSONArray("items");if(a==null)a=d.optJSONArray("list");if(a==null)a=d.optJSONArray("subjects");return a==null?new JSONArray():a;}
- private JSONArray storySearchArray(JSONObject response){JSONObject d=response==null?null:response.optJSONObject("data");JSONArray a=d==null?null:d.optJSONArray("content");if(a==null&&d!=null)a=d.optJSONArray("list");if(a==null&&d!=null)a=d.optJSONArray("items");if(a==null&&d!=null)a=d.optJSONArray("results");if(a==null&&d!=null)a=d.optJSONArray("suggestions");if(a==null&&d!=null)a=d.optJSONArray("keywords");if(a==null)a=response==null?null:response.optJSONArray("content");return a==null?new JSONArray():a;}
- private JSONObject storySearchItem(JSONObject source){JSONObject o=new JSONObject();try{JSONObject info=storyInfo(source);if(info.length()==0)info=source;String id=info.optString("id",info.optString("showId",source.optString("id",source.optString("showId",""))));String name=info.optString("title",info.optString("name",source.optString("title",source.optString("name",""))));String image=info.optString("imageUrl",info.optString("cover",source.optString("imageUrl",source.optString("cover",""))));int episodes=info.optInt("numOfEpisodes",info.optInt("episodeCount",source.optInt("numOfEpisodes",source.optInt("episodeCount",0))));JSONObject meta=info.optJSONObject("metadata");if(meta==null)meta=source.optJSONObject("metadata");o.put("id",id);o.put("showId",id);o.put("title",name);o.put("imageUrl",image);o.put("numOfEpisodes",episodes);o.put("genre",meta==null?"Drama":meta.optString("genre","Drama"));o.put("subjectType",7);o.put("source","storytv");}catch(Exception ignored){}return o;}
+ private JSONArray storySearchArray(JSONObject response){
+  Object node=response;for(int depth=0;depth<5&&node!=null;depth++){
+   if(node instanceof JSONArray)return (JSONArray)node;
+   if(!(node instanceof JSONObject))return new JSONArray();
+   JSONObject obj=(JSONObject)node;String[] keys={"content","list","items","results","suggestions","keywords","searchList","search_list","shows","dramas","records"};
+   for(String key:keys){JSONArray found=obj.optJSONArray(key);if(found!=null)return found;}
+   Object next=obj.opt("data");if(next==null||next==JSONObject.NULL)next=obj.opt("result");if(next==null||next==JSONObject.NULL)next=obj.opt("response");node=next;
+  }
+  return new JSONArray();
+ }
+ private JSONObject storySearchItem(JSONObject source){
+  JSONObject o=new JSONObject();if(source==null)return o;
+  try{
+   JSONObject info=storyInfo(source);if(info.length()==0)info=source;
+   JSONObject nested=info.optJSONObject("showInfo");if(nested!=null)info=nested;
+   String id=info.optString("id",info.optString("showId",info.optString("show_id",source.optString("id",source.optString("showId",source.optString("show_id",""))))));
+   String name=info.optString("title",info.optString("name",info.optString("showName",source.optString("title",source.optString("name",source.optString("showName",""))))));
+   String image=info.optString("imageUrl",info.optString("cover",info.optString("coverUrl",source.optString("imageUrl",source.optString("cover",source.optString("coverUrl",""))))));
+   int episodes=info.optInt("numOfEpisodes",info.optInt("episodeCount",source.optInt("numOfEpisodes",source.optInt("episodeCount",0))));
+   JSONObject meta=info.optJSONObject("metadata");if(meta==null)meta=source.optJSONObject("metadata");
+   o.put("id",id);o.put("showId",id);o.put("title",name);o.put("imageUrl",image);o.put("numOfEpisodes",episodes);o.put("genre",meta==null?"Drama":meta.optString("genre","Drama"));o.put("subjectType",7);o.put("source","storytv");
+  }catch(Exception ignored){}
+  return o;
+ }
+ private String storySuggestionText(JSONObject item){
+  if(item==null)return "";
+  JSONObject info=storyInfo(item);if(info.length()==0)info=item;
+  String word=info.optString("keyword",info.optString("word",info.optString("text",info.optString("title",info.optString("name",info.optString("showName",""))))));
+  if(word.trim().isEmpty())word=item.optString("keyword",item.optString("word",item.optString("text",item.optString("title",item.optString("name","")))));
+  return word==null?"":word.trim();
+ }
  private void showSearch(){
   if(homePageViews==null){homePageViews=new ArrayList<>();for(int i=0;i<content.getChildCount();i++)homePageViews.add(content.getChildAt(i));}
   top.setVisibility(View.GONE);content.removeAllViews();
@@ -100,7 +129,7 @@ public class MainActivity extends Activity {
   TextView hint=txt("Type at least 2 characters for suggestions.",13,MUTED,false);hint.setPadding(dp(50),dp(10),0,0);content.addView(hint);
   input.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence x,int st,int c,int f){}public void onTextChanged(CharSequence x,int st,int before,int count){
    if(suggestionTask!=null)searchHandler.removeCallbacks(suggestionTask);final String q=x.toString().trim();final int request=++suggestionRequest;suggestions.removeAllViews();if(q.length()<2)return;
-   suggestionTask=()->{new Thread(()->{try{JSONObject response=storySearch?storyApi.search(q):freeReelsSearch?freeReelsApi.suggestions(q):api.suggest(q);JSONArray raw=storySearch?storySearchArray(response):freeReelsSearch?freeReelsKeywords(response):searchArray(response);ArrayList<String> words=new ArrayList<>();HashSet<String> unique=new HashSet<>();for(int i=0;i<raw.length()&&words.size()<8;i++){Object item=raw.opt(i);String word=item instanceof String?(String)item:item instanceof JSONObject?((JSONObject)item).optString("keyword",((JSONObject)item).optString("word",((JSONObject)item).optString("title",""))):"";if(!word.trim().isEmpty()&&unique.add(word.trim().toLowerCase()))words.add(word.trim());if(storySearch&&item instanceof JSONObject){JSONArray tags=((JSONObject)item).optJSONObject("metadata")==null?null:((JSONObject)item).optJSONObject("metadata").optJSONArray("tags");if(tags!=null)for(int k=0;k<tags.length()&&words.size()<8;k++){String tag=tags.optString(k,"").trim();if(!tag.isEmpty()&&unique.add(tag.toLowerCase()))words.add(tag);}}}runOnUiThread(()->{if(request!=suggestionRequest||!input.getText().toString().trim().equals(q))return;suggestions.removeAllViews();for(String word:words){TextView option=txt(word,16,WHITE,false);option.setGravity(Gravity.CENTER_VERTICAL);option.setPadding(dp(14),dp(10),dp(14),dp(10));option.setFocusable(true);option.setFocusableInTouchMode(false);option.setBackground(bg(PANEL,0));option.setOnFocusChangeListener((v,focus)->option.setBackground(bg(focus?0xff3b171a:PANEL,focus?RED:0)));option.setOnClickListener(v->{input.setText(word);input.setSelection(word.length());suggestionRequest++;suggestions.removeAllViews();search(word,1);});suggestions.addView(option,new LinearLayout.LayoutParams(-1,dp(44)));}if(words.isEmpty()){TextView none=txt("No suggestions found",13,MUTED,false);suggestions.addView(none);}});}catch(Exception e){runOnUiThread(()->{if(request==suggestionRequest){suggestions.removeAllViews();TextView err=txt("Suggestions unavailable: "+e.getMessage(),12,MUTED,false);suggestions.addView(err);}});}}).start();};
+   suggestionTask=()->{new Thread(()->{try{JSONObject response=storySearch?storyApi.search(q):freeReelsSearch?freeReelsApi.suggestions(q):api.suggest(q);JSONArray raw=storySearch?storySearchArray(response):freeReelsSearch?freeReelsKeywords(response):searchArray(response);ArrayList<String> words=new ArrayList<>();HashSet<String> unique=new HashSet<>();for(int i=0;i<raw.length()&&words.size()<8;i++){Object item=raw.opt(i);String word=item instanceof String?(String)item:item instanceof JSONObject?storySuggestionText((JSONObject)item):"";if(!word.trim().isEmpty()&&unique.add(word.trim().toLowerCase()))words.add(word.trim());if(storySearch&&item instanceof JSONObject){JSONArray tags=((JSONObject)item).optJSONObject("metadata")==null?null:((JSONObject)item).optJSONObject("metadata").optJSONArray("tags");if(tags!=null)for(int k=0;k<tags.length()&&words.size()<8;k++){String tag=tags.optString(k,"").trim();if(!tag.isEmpty()&&unique.add(tag.toLowerCase()))words.add(tag);}}}runOnUiThread(()->{if(request!=suggestionRequest||!input.getText().toString().trim().equals(q))return;suggestions.removeAllViews();for(String word:words){TextView option=txt(word,16,WHITE,false);option.setGravity(Gravity.CENTER_VERTICAL);option.setPadding(dp(14),dp(10),dp(14),dp(10));option.setFocusable(true);option.setFocusableInTouchMode(false);option.setBackground(bg(PANEL,0));option.setOnFocusChangeListener((v,focus)->option.setBackground(bg(focus?0xff3b171a:PANEL,focus?RED:0)));option.setOnClickListener(v->{input.setText(word);input.setSelection(word.length());suggestionRequest++;suggestions.removeAllViews();search(word,1);});suggestions.addView(option,new LinearLayout.LayoutParams(-1,dp(44)));}if(words.isEmpty()){TextView none=txt("No suggestions found",13,MUTED,false);suggestions.addView(none);}});}catch(Exception e){runOnUiThread(()->{if(request==suggestionRequest){suggestions.removeAllViews();TextView err=txt("Suggestions unavailable: "+e.getMessage(),12,MUTED,false);suggestions.addView(err);}});}}).start();};
    searchHandler.postDelayed(suggestionTask,250);
   }public void afterTextChanged(android.text.Editable e){}});
   input.setOnEditorActionListener((v,action,event)->{String q=input.getText().toString().trim();if(!q.isEmpty()){if(suggestionTask!=null)searchHandler.removeCallbacks(suggestionTask);suggestionRequest++;search(q,1);}return true;});
@@ -465,9 +494,9 @@ public class MainActivity extends Activity {
    if(slideTask!=null)handler.removeCallbacks(slideTask);
    storyLangId=2;top.setVisibility(View.VISIBLE);if(top.getChildAt(0) instanceof TextView)((TextView)top.getChildAt(0)).setText("");
    pageScroll.setOnScrollChangeListener(null);content.removeAllViews();
-   TextView storyHeading=txt("Story TV",25,WHITE,true);storyHeading.setPadding(dp(48),dp(25),0,dp(2));content.addView(storyHeading);
+   TextView storyHeading=txt("Story TV",25,WHITE,true);storyHeading.setPadding(dp(48),dp(25),0,dp(8));content.addView(storyHeading);
    storyPage=0;storyHasMore=true;storyLoading=false;storyRequestId++;storyRowItems=0;storyCurrentRow=null;
-   storyGrid=new LinearLayout(this);storyGrid.setOrientation(1);storyGrid.setPadding(dp(30),0,dp(30),dp(24));content.addView(storyGrid,new LinearLayout.LayoutParams(-1,-2));
+   storyGrid=new LinearLayout(this);storyGrid.setOrientation(1);storyGrid.setPadding(0,dp(4),0,dp(25));content.addView(storyGrid,new LinearLayout.LayoutParams(-1,-2));
    loadStoryPage(0);
   }
   private void changeStoryLanguage(int langId){
