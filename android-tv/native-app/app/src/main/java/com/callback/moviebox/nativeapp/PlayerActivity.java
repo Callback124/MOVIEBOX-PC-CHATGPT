@@ -358,6 +358,8 @@ public class PlayerActivity extends Activity {
             }).start();
         }
         String format = getIntent().getStringExtra("format");
+        JSONArray freeReelsSubtitles;
+        try { freeReelsSubtitles = new JSONArray(getIntent().getStringExtra("freeReelsSubtitles") == null ? "[]" : getIntent().getStringExtra("freeReelsSubtitles")); } catch (Exception ignored) { freeReelsSubtitles = new JSONArray(); }
         long pos = getIntent().getLongExtra("pos", 0L);
         titleView.setText(formatEpisodeTitle(basePlayerTitle));
         if (url != null && !url.trim().isEmpty()) {
@@ -369,6 +371,19 @@ public class PlayerActivity extends Activity {
                 if (f.contains("HLS") || f.contains("M3U8")) mediaItemBuilder.setMimeType("application/x-mpegURL");
                 else if (f.contains("DASH") || f.contains("MPD")) mediaItemBuilder.setMimeType("application/dash+xml");
                 else if (f.contains("MP4")) mediaItemBuilder.setMimeType("video/mp4");
+            }
+            if (freeReelsMode) {
+                for (int si=0;si<freeReelsSubtitles.length();si++) {
+                    JSONObject sub=freeReelsSubtitles.optJSONObject(si); if(sub==null)continue;
+                    String subUrl=sub.optString("vtt",""); if(subUrl.isEmpty())subUrl=sub.optString("subtitle","");
+                    if(subUrl.isEmpty())continue;
+                    String lang=sub.optString("language","und");String label=sub.optString("display_name",lang);
+                    String mime=subUrl.toLowerCase(Locale.ROOT).contains(".srt")?MimeTypes.APPLICATION_SUBRIP:MimeTypes.TEXT_VTT;
+                    mediaItemBuilder.setSubtitleConfigurations(java.util.Collections.singletonList(
+                        new MediaItem.SubtitleConfiguration.Builder(Uri.parse(subUrl)).setMimeType(mime).setLanguage(lang).setLabel(label).setSelectionFlags(C.SELECTION_FLAG_DEFAULT).build()
+                    ));
+                    break;
+                }
             }
             player.setMediaItem(mediaItemBuilder.build());
             player.prepare();
@@ -1497,7 +1512,10 @@ public class PlayerActivity extends Activity {
         if(player!=null){player.stop();player.clearMediaItems();}
         updateEpisodeControls();
         activeSourceUrl=stream;
-        player.setMediaItem(MediaItem.fromUri(stream));
+        MediaItem.Builder nextItem=new MediaItem.Builder().setUri(stream);
+        JSONArray subs=ep.optJSONArray("subtitle_list");
+        if(subs!=null&&subs.length()>0){JSONObject sub=subs.optJSONObject(0);if(sub!=null){String subUrl=sub.optString("vtt","");if(subUrl.isEmpty())subUrl=sub.optString("subtitle","");if(!subUrl.isEmpty()){String lang=sub.optString("language","und");String label=sub.optString("display_name",lang);String mime=subUrl.toLowerCase(Locale.ROOT).contains(".srt")?MimeTypes.APPLICATION_SUBRIP:MimeTypes.TEXT_VTT;nextItem.setSubtitleConfigurations(java.util.Collections.singletonList(new MediaItem.SubtitleConfiguration.Builder(Uri.parse(subUrl)).setMimeType(mime).setLanguage(lang).setLabel(label).setSelectionFlags(C.SELECTION_FLAG_DEFAULT).build()));}}}
+        player.setMediaItem(nextItem.build());
         player.prepare();
         player.setPlayWhenReady(true);
     }
