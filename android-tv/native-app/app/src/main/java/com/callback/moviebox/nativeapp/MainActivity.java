@@ -516,7 +516,7 @@ public class MainActivity extends Activity {
    runOnUiThread(()->{
     if(getSelectedServer()!=3||requestId!=storyRequestId||requestedLang!=storyLangId)return;
     if(page==0){storyGrid.removeAllViews();storyRowItems=0;storyCurrentRow=null;}
-    int count=0;for(int i=0;i<result.length();i++){JSONObject item=result.optJSONObject(i);JSONObject show=storyInfo(item);if(show.optString("id").isEmpty())continue;count++;if(storyCurrentRow==null||storyRowItems>=6){storyCurrentRow=new LinearLayout(this);storyCurrentRow.setGravity(Gravity.TOP);storyCurrentRow.setOrientation(0);storyGrid.addView(storyCurrentRow,new LinearLayout.LayoutParams(-1,-2));storyRowItems=0;}addStoryCard(storyCurrentRow,show,item);storyRowItems++;}
+    int count=0;for(int i=0;i<result.length();i++){JSONObject item=result.optJSONObject(i);JSONObject show=storyInfo(item);if(show.optString("id").isEmpty())continue;count++;if(storyCurrentRow==null||storyRowItems>=6){storyCurrentRow=new LinearLayout(this);storyCurrentRow.setGravity(Gravity.TOP);storyCurrentRow.setOrientation(0);storyCurrentRow.setPadding(dp(24),dp(8),dp(24),dp(8));storyGrid.addView(storyCurrentRow,new LinearLayout.LayoutParams(-1,-2));storyRowItems=0;}addStoryCard(storyCurrentRow,show,item);storyRowItems++;}
 
     storyHasMore=result.length()>=50;storyPage=page+1;storyLoading=false;
     if(page==0&&count==0){TextView empty=txt("No dramas were returned by Story TV.",16,MUTED,false);empty.setPadding(dp(8),dp(24),dp(8),dp(24));storyGrid.addView(empty);}
