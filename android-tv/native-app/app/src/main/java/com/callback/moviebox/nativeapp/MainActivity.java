@@ -26,7 +26,7 @@ public class MainActivity extends Activity {
  private FrameLayout heroFrame;
  private static final String PREFS="moviebox_native_library";
  private String detailPath="";
- private ArrayList<View> previousPageViews=null; private int previousScrollY=0; private boolean previousTopVisible=true; private ArrayList<View> homePageViews=null; private String activeSearchKeyword=""; private int nextSearchPage=1; private boolean searchLoading=false,searchHasMore=false; private LinearLayout searchGrid=null,searchCurrentRow=null; private int searchRowItems=0;
+ private ArrayList<View> previousPageViews=null; private int previousScrollY=0; private boolean previousTopVisible=true; private ArrayList<View> homePageViews=null; private String activeSearchKeyword=""; private int nextSearchPage=1; private boolean searchLoading=false,searchHasMore=false; private LinearLayout searchGrid=null,searchCurrentRow=null; private int searchRowItems=0; private final HashSet<String> storySearchSeen=new HashSet<>();
  private int dp(float v){return (int)(v*getResources().getDisplayMetrics().density+.5f);}
  @Override public void onCreate(Bundle b){super.onCreate(b);getWindow().setFlags(1024,1024);getWindow().getDecorView().setSystemUiVisibility(5894|1024|512);api=new MovieBoxRepository(this);storyApi=new StoryTvRepository();buildShell();if(getSelectedServer()==3)showStoryTvHome();else loadHome();}
  private GradientDrawable bg(int color,int stroke){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(3));if(stroke!=0)d.setStroke(dp(2),stroke);return d;}
@@ -113,14 +113,20 @@ public class MainActivity extends Activity {
   final String keyword=q.trim();
   if(page==1){JSONArray old=readCollection("search_history"),next=new JSONArray();next.put(keyword);for(int si=0;si<old.length();si++){String prior=old.optString(si,"");if(!prior.equalsIgnoreCase(keyword)&&!prior.isEmpty()&&next.length()<12)next.put(prior);}getSharedPreferences(PREFS,MODE_PRIVATE).edit().putString(scopedKey("search_history"),next.toString()).apply();}
   if(page==1){
-   activeSearchKeyword=keyword;nextSearchPage=1;searchLoading=true;searchHasMore=false;searchGrid=null;searchCurrentRow=null;searchRowItems=0;
+   activeSearchKeyword=keyword;nextSearchPage=1;searchLoading=true;searchHasMore=false;searchGrid=null;searchCurrentRow=null;searchRowItems=0;storySearchSeen.clear();
    content.removeAllViews();TextView loading=txt(getSelectedServer()==3?"Searching Story TV…":"Searching MovieBox…",16,MUTED,false);loading.setPadding(dp(48),dp(28),0,dp(12));content.addView(loading);
   }else{if(searchLoading||!searchHasMore)return;searchLoading=true;}
   final int requestedPage=page;
   new Thread(()->{try{
-   boolean storyMode=getSelectedServer()==3;JSONObject response=storyMode?storyApi.search(keyword):api.search(keyword,requestedPage);JSONArray items;if(storyMode){JSONArray raw=storySearchArray(response);items=new JSONArray();for(int i=0;i<raw.length();i++)items.put(storySearchItem(raw.optJSONObject(i)));}else items=searchArray(response);
+   boolean storyMode=getSelectedServer()==3;JSONObject response=storyMode?storyApi.search(keyword,requestedPage,50):api.search(keyword,requestedPage);JSONArray items;if(storyMode){JSONArray raw=storySearchArray(response);items=new JSONArray();for(int i=0;i<raw.length();i++)items.put(storySearchItem(raw.optJSONObject(i)));}else items=searchArray(response);
    JSONObject data=response.optJSONObject("data");JSONObject pager=data==null?null:data.optJSONObject("pager");
-   boolean more=getSelectedServer()==3?false:(pager!=null?pager.optBoolean("hasMore",requestedPage<pager.optInt("totalPages",requestedPage)):items.length()>=24);
+   boolean more;
+   if(storyMode){
+    boolean hasMoreFlag=data!=null&&(data.has("hasMore")||data.has("has_more"));
+    more=pager!=null?pager.optBoolean("hasMore",requestedPage<pager.optInt("totalPages",requestedPage)):
+      hasMoreFlag?(data.optBoolean("hasMore",data.optBoolean("has_more",false))):
+      items.length()>=50;
+   }else more=pager!=null?pager.optBoolean("hasMore",requestedPage<pager.optInt("totalPages",requestedPage)):items.length()>=24;
    runOnUiThread(()->{
     if(!keyword.equals(activeSearchKeyword))return;
     if(requestedPage==1){content.removeAllViews();searchGrid=new LinearLayout(this);searchGrid.setOrientation(1);searchGrid.setPadding(0,dp(8),0,dp(20));content.addView(searchGrid,new LinearLayout.LayoutParams(-1,-2));}
@@ -138,6 +144,10 @@ public class MainActivity extends Activity {
   int cols=6;int gap=dp(8);int horizontal=dp(48);int cardW=Math.max(dp(42),(getResources().getDisplayMetrics().widthPixels-horizontal-gap*(cols-1))/cols);
   for(int i=0;i<items.length();i++){
    JSONObject item=items.optJSONObject(i);if(item==null)continue;
+   if("storytv".equals(item.optString("source"))){
+    String unique=item.optString("id",item.optString("title","")).trim();
+    if(unique.isEmpty()||!storySearchSeen.add(unique))continue;
+   }
    if(searchCurrentRow==null||searchRowItems>=cols){
     searchCurrentRow=new LinearLayout(this);searchCurrentRow.setOrientation(0);searchCurrentRow.setGravity(Gravity.TOP);searchCurrentRow.setPadding(dp(24),dp(8),dp(24),dp(8));
     searchGrid.addView(searchCurrentRow,new LinearLayout.LayoutParams(-1,-2));searchRowItems=0;
