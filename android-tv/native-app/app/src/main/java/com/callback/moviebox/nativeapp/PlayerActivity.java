@@ -327,7 +327,7 @@ public class PlayerActivity extends Activity {
 
             @Override
             public void onTracksChanged(Tracks tracks) {
-                if (freeReelsMode && freeReelsPreferredQualityHeight > 0) applyPreferredFreeReelsQuality();
+                if ((freeReelsMode || storyTvMode) && freeReelsPreferredQualityHeight > 0) applyPreferredEpisodeQuality();
                 if (sheetOpen) renderSheet(false);
             }
         });
@@ -1088,7 +1088,7 @@ public class PlayerActivity extends Activity {
             return;
         } else if (type == C.TRACK_TYPE_VIDEO) {
             videoForced = true;
-            if (freeReelsMode) freeReelsPreferredQualityHeight = r.format.height;
+            if (freeReelsMode || storyTvMode) freeReelsPreferredQualityHeight = r.format.height;
             b.clearOverridesOfType(C.TRACK_TYPE_VIDEO);
             b.setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false);
         }
@@ -1133,7 +1133,7 @@ public class PlayerActivity extends Activity {
             }));
         }
         for (final TrackRef r : refs) {
-            boolean on = refs.size() == 1 || (videoForced && r.group.isTrackSelected(r.index));
+            boolean on = refs.size() == 1 || (videoForced && isExplicitVideoTrackSelected(r));
             out.add(new Opt(r.format.height > 0 ? r.format.height + "p" : "Auto", on, () -> selectTrack(r)));
         }
         if (refs.isEmpty()) out.add(new Opt(resourcesLoading ? "Loading…" : "Auto", false, () -> { }));
@@ -1600,17 +1600,26 @@ public class PlayerActivity extends Activity {
         player.setPlayWhenReady(true);
     }
 
-    private void applyPreferredFreeReelsQuality() {
-        if (player == null || !freeReelsMode || freeReelsPreferredQualityHeight <= 0) return;
+    private boolean isExplicitVideoTrackSelected(TrackRef ref) {
+        if (player == null) return false;
+        TrackSelectionOverride override = player.getTrackSelectionParameters().overrides.get(ref.group.getMediaTrackGroup());
+        return override != null && override.trackIndices.size() == 1 && override.trackIndices.contains(ref.index);
+    }
+
+    private void applyPreferredEpisodeQuality() {
+        if (player == null || (!freeReelsMode && !storyTvMode) || freeReelsPreferredQualityHeight <= 0) return;
         List<TrackRef> refs = trackRefs(C.TRACK_TYPE_VIDEO);
         TrackRef best = null;
         int bestDistance = Integer.MAX_VALUE;
         for (TrackRef ref : refs) {
             if (ref.format.height <= 0) continue;
             int distance = Math.abs(ref.format.height - freeReelsPreferredQualityHeight);
-            if (distance < bestDistance) { best = ref; bestDistance = distance; }
+            if (distance < bestDistance || (distance == bestDistance && best != null && bitrate(ref.format) > bitrate(best.format))) {
+                best = ref;
+                bestDistance = distance;
+            }
         }
-        if (best == null || best.group.isTrackSelected(best.index)) return;
+        if (best == null || isExplicitVideoTrackSelected(best)) return;
         TrackSelectionParameters.Builder builder = player.getTrackSelectionParameters().buildUpon()
                 .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
                 .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false);
