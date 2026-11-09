@@ -357,6 +357,7 @@ public class MainActivity extends Activity {
  private String freeReelsNext(JSONObject response){JSONObject p=freeReelsPageInfo(response);return p.optString("next",p.optString("next_cursor",""));}
  private boolean freeReelsHasMore(JSONObject response){JSONObject p=freeReelsPageInfo(response);return p.optBoolean("has_more",p.optBoolean("hasMore",false));}
  private void showFreeReelsHome(){
+  activeSearchKeyword="";freeSearchHasMore=false;freeSearchLoading=false;
   top.setVisibility(View.VISIBLE);if(top.getChildAt(0) instanceof TextView)((TextView)top.getChildAt(0)).setText("");
   if(slideTask!=null)handler.removeCallbacks(slideTask);content.removeAllViews();pageScroll.scrollTo(0,0);freeHomeNext="";freeHomeModule="";freeHomeHasMore=true;freeHomeLoading=false;freeHomeRow=null;freeHomeRowCount=0;freeHomeRequest++;
   TextView heading=txt("Free Reels",25,WHITE,true);heading.setPadding(dp(48),dp(25),0,dp(8));content.addView(heading);
@@ -391,6 +392,7 @@ public class MainActivity extends Activity {
   if(seriesId.isEmpty()){content.removeAllViews();TextView error=txt("FreeReels item is missing series ID. Fields: "+item.names(),14,WHITE,false);error.setPadding(dp(48),dp(25),dp(48),dp(15));content.addView(error);return;}
   new Thread(()->{try{
    JSONObject response=freeReelsApi.dramaInfo(seriesId);JSONObject data=response.optJSONObject("data");JSONObject info=data==null?null:data.optJSONObject("info");if(info==null)throw new Exception("API response did not contain data.info");
+   info.put("series_id",seriesId);
    JSONArray episodes=info.optJSONArray("episode_list");if(episodes==null)episodes=new JSONArray();final JSONObject drama=info;final JSONArray eps=episodes;
    runOnUiThread(()->renderFreeReelsDetail(drama,eps));
   }catch(Exception e){runOnUiThread(()->{content.removeAllViews();TextView error=txt("FreeReels details unavailable: "+e.getMessage(),14,WHITE,false);error.setPadding(dp(48),dp(25),dp(48),dp(15));content.addView(error);TextView retry=button("RETRY",false,()->openFreeReelsDetail(item));content.addView(retry,new LinearLayout.LayoutParams(dp(150),dp(48)));});}}).start();
@@ -437,7 +439,7 @@ public class MainActivity extends Activity {
   if(chosen==null){new AlertDialog.Builder(this).setTitle("Episode unavailable").setMessage("FreeReels did not return this episode.").setPositiveButton("OK",null).show();return;}
   String stream=chosen.optString("external_audio_h264_m3u8","");if(stream.isEmpty())stream=chosen.optString("video_url","");if(stream.isEmpty())stream=chosen.optString("m3u8_url","");if(stream.isEmpty())stream=chosen.optString("external_audio_h265_m3u8","");
   if(stream.isEmpty()){new AlertDialog.Builder(this).setTitle("Stream unavailable").setMessage("No playable URL was returned for Episode "+episodeIndex).setPositiveButton("OK",null).show();return;}
-  Intent intent=new Intent(this,PlayerActivity.class);intent.putExtra("freeReels",true);intent.putExtra("url",stream);intent.putExtra("title",info.optString("name","FreeReels"));intent.putExtra("episode",episodeIndex);intent.putExtra("episodeCount",episodes.length());intent.putExtra("freeReelsSubtitles",chosen.optJSONArray("subtitle_list")==null?"[]":chosen.optJSONArray("subtitle_list").toString());JSONArray compactEpisodes=new JSONArray();for(int ei=0;ei<episodes.length();ei++){JSONObject source=episodes.optJSONObject(ei);if(source==null)continue;JSONObject compact=new JSONObject();try{compact.put("index",source.optInt("index",ei+1));compact.put("external_audio_h264_m3u8",source.optString("external_audio_h264_m3u8",""));compact.put("video_url",source.optString("video_url",""));compact.put("m3u8_url",source.optString("m3u8_url",""));compact.put("external_audio_h265_m3u8",source.optString("external_audio_h265_m3u8",""));compact.put("name",source.optString("name",""));}catch(Exception ignored){}compactEpisodes.put(compact);}intent.putExtra("freeReelsEpisodes",compactEpisodes.toString());startActivity(intent);
+  Intent intent=new Intent(this,PlayerActivity.class);intent.putExtra("freeReels",true);intent.putExtra("url",stream);intent.putExtra("title",info.optString("name","FreeReels"));intent.putExtra("freeReelsSeriesId",info.optString("series_id",info.optString("series_key",info.optString("id",""))));intent.putExtra("episode",episodeIndex);intent.putExtra("episodeCount",episodes.length());intent.putExtra("freeReelsSubtitles",chosen.optJSONArray("subtitle_list")==null?"[]":chosen.optJSONArray("subtitle_list").toString());JSONArray compactEpisodes=new JSONArray();for(int ei=0;ei<episodes.length();ei++){JSONObject source=episodes.optJSONObject(ei);if(source==null)continue;JSONObject compact=new JSONObject();try{compact.put("index",source.optInt("index",ei+1));compact.put("external_audio_h264_m3u8",source.optString("external_audio_h264_m3u8",""));compact.put("video_url",source.optString("video_url",""));compact.put("m3u8_url",source.optString("m3u8_url",""));compact.put("external_audio_h265_m3u8",source.optString("external_audio_h265_m3u8",""));compact.put("name",source.optString("name",""));}catch(Exception ignored){}compactEpisodes.put(compact);}intent.putExtra("freeReelsEpisodes",compactEpisodes.toString());startActivity(intent);
  }
  private void freeReelsSearch(String query,int page){
   if(query==null||query.trim().isEmpty())return;String keyword=query.trim();
@@ -575,6 +577,24 @@ public class MainActivity extends Activity {
   TextView note=txt("This server homepage is being prepared.",14,MUTED,false);note.setGravity(Gravity.CENTER);LinearLayout.LayoutParams noteLp=new LinearLayout.LayoutParams(-1,-2);noteLp.topMargin=dp(8);panel.addView(note,noteLp);
   TextView change=button("CHOOSE ANOTHER SERVER",false,()->showSettings());LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(dp(270),dp(48));cp.topMargin=dp(26);panel.addView(change,cp);
  }
- @Override public void onBackPressed(){if(slideTask!=null)handler.removeCallbacks(slideTask);if(previousPageViews!=null){content.removeAllViews();for(View v:previousPageViews){if(v.getParent() instanceof android.view.ViewGroup)((android.view.ViewGroup)v.getParent()).removeView(v);content.addView(v);}previousPageViews=null;top.setVisibility(previousTopVisible?View.VISIBLE:View.GONE);pageScroll.post(()->pageScroll.scrollTo(0,previousScrollY));return;}if(homePageViews!=null){content.removeAllViews();for(View v:homePageViews){if(v.getParent() instanceof android.view.ViewGroup)((android.view.ViewGroup)v.getParent()).removeView(v);content.addView(v);}homePageViews=null;activeSearchKeyword="";searchHasMore=false;searchLoading=false;pageScroll.setOnScrollChangeListener(null);top.setVisibility(View.VISIBLE);pageScroll.post(()->pageScroll.scrollTo(0,0));return;}new AlertDialog.Builder(this).setTitle("Exit MovieBox?").setMessage("Do you want to close the application?").setNegativeButton("No",(d,w)->d.dismiss()).setPositiveButton("Yes",(d,w)->{if(slideTask!=null)handler.removeCallbacks(slideTask);finish();}).show();}
+ private void restoreFreeReelsPagination(){
+  if(getSelectedServer()!=4)return;
+  pageScroll.setOnScrollChangeListener((View v,int sx,int sy,int osx,int osy)->{
+   View child=pageScroll.getChildAt(0);if(child==null)return;
+   int remaining=child.getBottom()-sy-pageScroll.getHeight();
+   if(!activeSearchKeyword.isEmpty()){
+    if(remaining<dp(650)&&freeSearchHasMore&&!freeSearchLoading)freeReelsSearch(activeSearchKeyword,2);
+   }else if(remaining<dp(550)&&freeHomeHasMore&&!freeHomeLoading)loadFreeReelsHome(true);
+  });
+  pageScroll.post(()->{
+   View child=pageScroll.getChildAt(0);if(child==null)return;
+   int remaining=child.getBottom()-pageScroll.getScrollY()-pageScroll.getHeight();
+   if(remaining<dp(650)){
+    if(!activeSearchKeyword.isEmpty()&&freeSearchHasMore&&!freeSearchLoading)freeReelsSearch(activeSearchKeyword,2);
+    else if(activeSearchKeyword.isEmpty()&&freeHomeHasMore&&!freeHomeLoading)loadFreeReelsHome(true);
+   }
+  });
+ }
+ @Override public void onBackPressed(){if(slideTask!=null)handler.removeCallbacks(slideTask);if(previousPageViews!=null){content.removeAllViews();for(View v:previousPageViews){if(v.getParent() instanceof android.view.ViewGroup)((android.view.ViewGroup)v.getParent()).removeView(v);content.addView(v);}previousPageViews=null;top.setVisibility(previousTopVisible?View.VISIBLE:View.GONE);if(getSelectedServer()==4)restoreFreeReelsPagination();pageScroll.post(()->pageScroll.scrollTo(0,previousScrollY));return;}if(homePageViews!=null){content.removeAllViews();for(View v:homePageViews){if(v.getParent() instanceof android.view.ViewGroup)((android.view.ViewGroup)v.getParent()).removeView(v);content.addView(v);}homePageViews=null;activeSearchKeyword="";searchHasMore=false;searchLoading=false;pageScroll.setOnScrollChangeListener(null);top.setVisibility(View.VISIBLE);pageScroll.post(()->pageScroll.scrollTo(0,0));return;}new AlertDialog.Builder(this).setTitle("Exit MovieBox?").setMessage("Do you want to close the application?").setNegativeButton("No",(d,w)->d.dismiss()).setPositiveButton("Yes",(d,w)->{if(slideTask!=null)handler.removeCallbacks(slideTask);finish();}).show();}
  @Override protected void onDestroy(){super.onDestroy();if(slideTask!=null)handler.removeCallbacks(slideTask);}
 }
