@@ -242,6 +242,12 @@ public class PlayerActivity extends Activity {
             requestHeaders.put("Origin", "https://storytv.asia");
             requestHeaders.put("Referer", "https://storytv.asia/");
         }
+        if (getIntent().getBooleanExtra("freeReels", false)) {
+            requestHeaders.put("User-Agent", "okhttp/4.12.0");
+            requestHeaders.put("Origin", "https://free-reels.com");
+            requestHeaders.put("Referer", "https://free-reels.com/");
+            requestHeaders.put("Accept", "*/*");
+        }
         if (getIntent().getBooleanExtra("movieBox", false)) {
             requestHeaders.put("Origin", "https://movieboxph.org");
             requestHeaders.put("Referer", movieBoxReferer(getIntent().getStringExtra("detailPath")));
