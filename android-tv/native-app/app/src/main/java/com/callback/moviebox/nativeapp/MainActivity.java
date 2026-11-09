@@ -616,7 +616,6 @@ public class MainActivity extends Activity {
 
 
  private static final String[][] LOOKR_CATEGORIES={
-  {"Featured","recommend","Featured","0"},
   {"Movies","Movies","Popular Movies","0"},
   {"Series","Series","Trending drama","0"},
   {"Anime","Anime","Trending Anime","9019462595941650792"},
@@ -630,7 +629,7 @@ public class MainActivity extends Activity {
   TextView heading=txt("Lookr",25,WHITE,true);heading.setPadding(dp(48),dp(18),0,dp(8));content.addView(heading);
   HorizontalScrollView categoryScroll=new HorizontalScrollView(this);categoryScroll.setHorizontalScrollBarEnabled(false);categoryScroll.setFillViewport(false);
   LinearLayout categoryBar=new LinearLayout(this);categoryBar.setGravity(Gravity.CENTER_VERTICAL);categoryBar.setPadding(dp(42),dp(4),dp(42),dp(8));categoryScroll.addView(categoryBar,new HorizontalScrollView.LayoutParams(-2,dp(52)));content.addView(categoryScroll);
-  for(String[] category:LOOKR_CATEGORIES){TextView tab=txt(category[0],16,category[0].equals("Movies")?WHITE:MUTED,true);tab.setGravity(Gravity.CENTER);tab.setPadding(dp(18),0,dp(18),0);tab.setFocusable(true);tab.setBackground(bg(0xff171a22,category[0].equals("Movies")?RED:0));tab.setOnFocusChangeListener((v,focus)->tab.setBackground(bg(focus?0xff272b35:0xff171a22,focus?RED:0)));tab.setOnClickListener(v->{lookrTag=category[1];lookrSubTag=category[2];lookrOpId=category[3];if(lookrTag.equals("Movies"))lookrSubTag="Popular Movies";if(lookrTag.equals("Series"))lookrSubTag="Trending drama";if(lookrTag.equals("Anime"))lookrSubTag="Trending Anime";if(lookrTag.equals("Featured"))lookrSubTag="Featured";if(lookrTag.equals("Short TV"))lookrSubTag="";renderLookrFilters();resetLookrFeed();});LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-2,dp(42));lp.rightMargin=dp(8);categoryBar.addView(tab,lp);}
+  for(String[] category:LOOKR_CATEGORIES){TextView tab=txt(category[0],16,category[0].equals("Movies")?WHITE:MUTED,true);tab.setGravity(Gravity.CENTER);tab.setPadding(dp(18),0,dp(18),0);tab.setFocusable(true);tab.setBackground(bg(0xff171a22,category[0].equals("Movies")?RED:0));tab.setOnFocusChangeListener((v,focus)->tab.setBackground(bg(focus?0xff272b35:0xff171a22,focus?RED:0)));tab.setOnClickListener(v->{lookrTag=category[1];lookrSubTag=category[2];lookrOpId=category[3];if(lookrTag.equals("Movies"))lookrSubTag="Popular Movies";if(lookrTag.equals("Series"))lookrSubTag="Trending drama";if(lookrTag.equals("Anime"))lookrSubTag="Trending Anime";if(lookrTag.equals("Short TV"))lookrSubTag="";renderLookrFilters();resetLookrFeed();});LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-2,dp(42));lp.rightMargin=dp(8);categoryBar.addView(tab,lp);}
   lookrFilterHost=new LinearLayout(this);lookrFilterHost.setOrientation(1);content.addView(lookrFilterHost,new LinearLayout.LayoutParams(-1,-2));renderLookrFilters();
   lookrGrid=new LinearLayout(this);lookrGrid.setOrientation(1);lookrGrid.setPadding(dp(16),dp(6),dp(16),dp(24));content.addView(lookrGrid,new LinearLayout.LayoutParams(-1,-2));
   loadLookrPage(false);
@@ -638,13 +637,13 @@ public class MainActivity extends Activity {
  }
  private LinearLayout lookrFilterHost;
  private void renderLookrFilters(){
-  if(lookrFilterHost==null)return;lookrFilterHost.removeAllViews();
+  if(lookrFilterHost==null)return;lookrFilterHost.removeAllViews();lookrFilterHost.setVisibility(View.VISIBLE);
   String[][] chips;
   if(lookrTag.equals("Movies"))chips=new String[][]{{"Popular Movies","0"},{"Hollywood Movies","4674513975244114264"},{"Bollywood Movies","6017853301595819040"},{"For you","0"}};
-  else if(lookrTag.equals("Series"))chips=new String[][]{{"Trending drama","0"},{"Indian Drama","933386079317675808"},{"Western Drama","8398270291826328248"},{"Korean Drama","4736632688541585768"}};
-  else if(lookrTag.equals("Anime"))chips=new String[][]{{"Trending Anime","9019462595941650792"},{"Burning with Ardour","4503689175828416400"},{"Adventurers' Saga","3134335833860375240"}};
-  else if(lookrTag.equals("Featured"))chips=new String[][]{{"Featured","0"}};
-  else chips=new String[][]{{"All Short TV","0"}};
+  else if(lookrTag.equals("Series"))chips=new String[][]{{"Trending drama","0"},{"Indian Drama","933386079317675808"},{"Western Drama","8398270291826328248"},{"Korean Drama","4736632688541585768"},{"For you","0"}};
+  else if(lookrTag.equals("Anime"))chips=new String[][]{{"Trending Anime","9019462595941650792"},{"Burning with Ardour","4503689175828416400"},{"Adventurers' Saga","3134335833860375240"},{"For you","0"}};
+  else if(lookrTag.equals("Short TV")){lookrFilterHost.setVisibility(View.GONE);return;}
+  else chips=new String[0][0];
   HorizontalScrollView scroll=new HorizontalScrollView(this);scroll.setHorizontalScrollBarEnabled(false);LinearLayout row=new LinearLayout(this);row.setPadding(dp(42),dp(4),dp(42),dp(8));row.setGravity(Gravity.CENTER_VERTICAL);scroll.addView(row,new HorizontalScrollView.LayoutParams(-2,dp(48)));lookrFilterHost.addView(scroll);
   for(String[] chip:chips){String label=chip[0],op=chip[1];TextView b=txt(label,13,WHITE,true);b.setGravity(Gravity.CENTER);b.setPadding(dp(15),0,dp(15),0);b.setFocusable(true);b.setBackground(bg(label.equals(lookrSubTag)?RED:0xff1e222b,0));b.setOnFocusChangeListener((v,focus)->b.setBackground(bg(focus?0xff383d49:(label.equals(lookrSubTag)?RED:0xff1e222b),focus?WHITE:0)));b.setOnClickListener(v->{lookrSubTag=lookrTag.equals("Short TV")?"":label;lookrOpId=op;resetLookrFeed();renderLookrFilters();});LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-2,dp(36));lp.rightMargin=dp(8);row.addView(b,lp);}
  }
