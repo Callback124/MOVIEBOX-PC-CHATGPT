@@ -83,8 +83,8 @@ public class MainActivity extends Activity {
  private void focusText(String s,Runnable r){TextView v=txt(s,16,RED,true);v.setPadding(dp(50),dp(18),dp(50),dp(18));v.setFocusable(true);v.setOnClickListener(w->r.run());content.addView(v);}
  private Handler searchHandler=new Handler(Looper.getMainLooper()); private Runnable suggestionTask; private int suggestionRequest=0;
  private JSONArray searchArray(JSONObject response){JSONObject d=response==null?null:response.optJSONObject("data");if(d==null)return new JSONArray();JSONArray a=d.optJSONArray("items");if(a==null)a=d.optJSONArray("list");if(a==null)a=d.optJSONArray("subjects");return a==null?new JSONArray():a;}
- private JSONArray storySearchArray(JSONObject response){JSONObject d=response==null?null:response.optJSONObject("data");JSONArray a=d==null?null:d.optJSONArray("content");return a==null?new JSONArray():a;}
- private JSONObject storySearchItem(JSONObject source){JSONObject o=new JSONObject();try{o.put("id",source.optString("id"));o.put("title",source.optString("title"));o.put("imageUrl",source.optString("imageUrl"));o.put("numOfEpisodes",source.optInt("numOfEpisodes"));JSONObject meta=source.optJSONObject("metadata");o.put("genre",meta==null?"Drama":meta.optString("genre","Drama"));o.put("subjectType",7);o.put("source","storytv");}catch(Exception ignored){}return o;}
+ private JSONArray storySearchArray(JSONObject response){JSONObject d=response==null?null:response.optJSONObject("data");JSONArray a=d==null?null:d.optJSONArray("content");if(a==null&&d!=null)a=d.optJSONArray("list");if(a==null&&d!=null)a=d.optJSONArray("items");if(a==null&&d!=null)a=d.optJSONArray("results");if(a==null&&d!=null)a=d.optJSONArray("suggestions");if(a==null&&d!=null)a=d.optJSONArray("keywords");if(a==null)a=response==null?null:response.optJSONArray("content");return a==null?new JSONArray():a;}
+ private JSONObject storySearchItem(JSONObject source){JSONObject o=new JSONObject();try{JSONObject info=storyInfo(source);if(info.length()==0)info=source;String id=info.optString("id",info.optString("showId",source.optString("id",source.optString("showId",""))));String name=info.optString("title",info.optString("name",source.optString("title",source.optString("name",""))));String image=info.optString("imageUrl",info.optString("cover",source.optString("imageUrl",source.optString("cover",""))));int episodes=info.optInt("numOfEpisodes",info.optInt("episodeCount",source.optInt("numOfEpisodes",source.optInt("episodeCount",0))));JSONObject meta=info.optJSONObject("metadata");if(meta==null)meta=source.optJSONObject("metadata");o.put("id",id);o.put("showId",id);o.put("title",name);o.put("imageUrl",image);o.put("numOfEpisodes",episodes);o.put("genre",meta==null?"Drama":meta.optString("genre","Drama"));o.put("subjectType",7);o.put("source","storytv");}catch(Exception ignored){}return o;}
  private void showSearch(){
   if(homePageViews==null){homePageViews=new ArrayList<>();for(int i=0;i<content.getChildCount();i++)homePageViews.add(content.getChildAt(i));}
   top.setVisibility(View.GONE);content.removeAllViews();
@@ -462,16 +462,15 @@ public class MainActivity extends Activity {
   root.addView(overlay,new FrameLayout.LayoutParams(-1,-1));storyLoadingOverlay=overlay;
  }
  private void showStoryTvHome(){
-  if(slideTask!=null)handler.removeCallbacks(slideTask);
-  top.setVisibility(View.VISIBLE);if(top.getChildAt(0) instanceof TextView)((TextView)top.getChildAt(0)).setText("");
-  pageScroll.setOnScrollChangeListener(null);content.removeAllViews();TextView storyHeading=txt("Story TV",25,WHITE,true);storyHeading.setPadding(dp(48),dp(25),0,dp(8));content.addView(storyHeading);storyPage=0;storyHasMore=true;storyLoading=false;storyRequestId++;storyRowItems=0;storyCurrentRow=null;
-  
-  HorizontalScrollView languageScroll=new HorizontalScrollView(this);languageScroll.setHorizontalScrollBarEnabled(false);languageScroll.setFillViewport(true);LinearLayout chips=new LinearLayout(this);chips.setGravity(Gravity.CENTER);chips.setPadding(dp(24),dp(4),dp(24),dp(14));languageScroll.addView(chips,new HorizontalScrollView.LayoutParams(-1,-2));LinearLayout.LayoutParams languageLp=new LinearLayout.LayoutParams(-1,-2);languageLp.topMargin=dp(66);content.addView(languageScroll,languageLp);
-  for(int i=0;i<storyLangIds.length;i++){final int ix=i;TextView chip=txt(storyLangNames[i],14,storyLangId==storyLangIds[i]?0xff000000:WHITE,true);chip.setGravity(Gravity.CENTER);chip.setPadding(dp(18),dp(10),dp(18),dp(10));chip.setFocusable(true);chip.setBackground(bg(storyLangId==storyLangIds[i]?0xffff626b:PANEL,storyLangId==storyLangIds[i]?RED:0));chip.setOnFocusChangeListener((v,focus)->{if(focus)chip.setBackground(bg(0xff393939,RED));else chip.setBackground(bg(storyLangId==storyLangIds[ix]?0xffff626b:PANEL,storyLangId==storyLangIds[ix]?RED:0));});chip.setOnClickListener(v->changeStoryLanguage(storyLangIds[ix]));LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-2,dp(42));cp.rightMargin=dp(9);chips.addView(chip,cp);}
-  storyGrid=new LinearLayout(this);storyGrid.setOrientation(1);storyGrid.setPadding(dp(30),dp(4),dp(30),dp(24));content.addView(storyGrid,new LinearLayout.LayoutParams(-1,-2));
-  loadStoryPage(0);
- }
- private void changeStoryLanguage(int langId){
+   if(slideTask!=null)handler.removeCallbacks(slideTask);
+   storyLangId=2;top.setVisibility(View.VISIBLE);if(top.getChildAt(0) instanceof TextView)((TextView)top.getChildAt(0)).setText("");
+   pageScroll.setOnScrollChangeListener(null);content.removeAllViews();
+   TextView storyHeading=txt("Story TV",25,WHITE,true);storyHeading.setPadding(dp(48),dp(25),0,dp(2));content.addView(storyHeading);
+   storyPage=0;storyHasMore=true;storyLoading=false;storyRequestId++;storyRowItems=0;storyCurrentRow=null;
+   storyGrid=new LinearLayout(this);storyGrid.setOrientation(1);storyGrid.setPadding(dp(30),0,dp(30),dp(24));content.addView(storyGrid,new LinearLayout.LayoutParams(-1,-2));
+   loadStoryPage(0);
+  }
+  private void changeStoryLanguage(int langId){
   if(storyLangId==langId)return;
   storyLangId=langId;storyPage=0;storyHasMore=true;storyLoading=false;storyRequestId++;storyRowItems=0;storyCurrentRow=null;
   // The feed loader selects this language and fetches its page sequentially.
