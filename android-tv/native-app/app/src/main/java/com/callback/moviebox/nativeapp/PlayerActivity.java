@@ -122,6 +122,7 @@ public class PlayerActivity extends Activity {
     private boolean storyTvMode = false;
     private boolean freeReelsMode = false;
     private int freeReelsEpisode = 1;
+    private String freeReelsSeriesId = "";
     private JSONArray freeReelsEpisodes = new JSONArray();
     private String storyTvShowId = "";
     private int storyTvEpisode = 1;
@@ -304,6 +305,9 @@ public class PlayerActivity extends Activity {
             public void onPlaybackStateChanged(int state) {
                 diag("Playback state changed: " + playbackStateName(state));
                 updatePlayIcon();
+                if (freeReelsMode && state == Player.STATE_READY && titleView != null) {
+                    titleView.setText(formatEpisodeTitle(basePlayerTitle));
+                }
                 if (state == Player.STATE_ENDED) {
                     showControls();
                     if (hasNextEpisode()) {
@@ -328,6 +332,7 @@ public class PlayerActivity extends Activity {
         storyTvMode = getIntent().getBooleanExtra("storyTv", false);
         freeReelsMode = getIntent().getBooleanExtra("freeReels", false);
         freeReelsEpisode = getIntent().getIntExtra("episode", 1);
+        freeReelsSeriesId = getIntent().getStringExtra("freeReelsSeriesId");
         try { freeReelsEpisodes = new JSONArray(getIntent().getStringExtra("freeReelsEpisodes") == null ? "[]" : getIntent().getStringExtra("freeReelsEpisodes")); } catch (Exception ignored) { freeReelsEpisodes = new JSONArray(); }
         storyTvShowId = getIntent().getStringExtra("storyShowId");
         storyTvEpisode = getIntent().getIntExtra("storyEpisode", 1);
@@ -379,10 +384,10 @@ public class PlayerActivity extends Activity {
                     if(subUrl.isEmpty())continue;
                     String lang=sub.optString("language","und");String label=sub.optString("display_name",lang);
                     String mime=subUrl.toLowerCase(Locale.ROOT).contains(".srt")?MimeTypes.APPLICATION_SUBRIP:MimeTypes.TEXT_VTT;
-                    mediaItemBuilder.setSubtitleConfigurations(java.util.Collections.singletonList(
-                        new MediaItem.SubtitleConfiguration.Builder(Uri.parse(subUrl)).setMimeType(mime).setLanguage(lang).setLabel(label).setSelectionFlags(C.SELECTION_FLAG_DEFAULT).build()
-                    ));
-                    break;
+                    java.util.ArrayList<MediaItem.SubtitleConfiguration> subtitleConfigs = new java.util.ArrayList<>();
+                    subtitleConfigs.add(new MediaItem.SubtitleConfiguration.Builder(Uri.parse(subUrl))
+                            .setMimeType(mime).setLanguage(lang).setLabel(label).setSelectionFlags(0).build());
+                    mediaItemBuilder.setSubtitleConfigurations(subtitleConfigs);
                 }
             }
             player.setMediaItem(mediaItemBuilder.build());
@@ -1500,22 +1505,69 @@ public class PlayerActivity extends Activity {
     }
 
     private void playFreeReelsEpisodeAt(int index) {
-        if(!freeReelsMode||index<0||index>=freeReelsEpisodes.length())return;
-        JSONObject ep=freeReelsEpisodes.optJSONObject(index);if(ep==null)return;
-        String stream=ep.optString("external_audio_h264_m3u8","");
-        if(stream.isEmpty())stream=ep.optString("video_url","");
-        if(stream.isEmpty())stream=ep.optString("m3u8_url","");
-        if(stream.isEmpty())stream=ep.optString("external_audio_h265_m3u8","");
-        if(stream.isEmpty()){toast("FreeReels Episode "+ep.optInt("index",index+1)+" has no stream URL");return;}
-        freeReelsEpisode=ep.optInt("index",index+1);
-        titleView.setText(formatEpisodeTitle(basePlayerTitle)+"  •  Loading stream…");
-        if(player!=null){player.stop();player.clearMediaItems();}
+        if (!freeReelsMode || index < 0 || index >= freeReelsEpisodes.length()) return;
+        JSONObject cached = freeReelsEpisodes.optJSONObject(index);
+        if (cached == null) return;
+        freeReelsEpisode = cached.optInt("index", index + 1);
+        titleView.setText(formatEpisodeTitle(basePlayerTitle) + "  •  Loading stream…");
+        if (player != null) { player.stop(); player.clearMediaItems(); }
         updateEpisodeControls();
-        activeSourceUrl=stream;
-        MediaItem.Builder nextItem=new MediaItem.Builder().setUri(stream);
-        JSONArray subs=ep.optJSONArray("subtitle_list");
-        if(subs!=null&&subs.length()>0){JSONObject sub=subs.optJSONObject(0);if(sub!=null){String subUrl=sub.optString("vtt","");if(subUrl.isEmpty())subUrl=sub.optString("subtitle","");if(!subUrl.isEmpty()){String lang=sub.optString("language","und");String label=sub.optString("display_name",lang);String mime=subUrl.toLowerCase(Locale.ROOT).contains(".srt")?MimeTypes.APPLICATION_SUBRIP:MimeTypes.TEXT_VTT;nextItem.setSubtitleConfigurations(java.util.Collections.singletonList(new MediaItem.SubtitleConfiguration.Builder(Uri.parse(subUrl)).setMimeType(mime).setLanguage(lang).setLabel(label).setSelectionFlags(C.SELECTION_FLAG_DEFAULT).build()));}}}
-        player.setMediaItem(nextItem.build());
+        final int targetEpisode = freeReelsEpisode;
+        new Thread(() -> {
+            JSONObject selected = cached;
+            try {
+                if (freeReelsSeriesId != null && !freeReelsSeriesId.trim().isEmpty()) {
+                    JSONObject response = new FreeReelsRepository().dramaInfo(freeReelsSeriesId);
+                    JSONObject data = response.optJSONObject("data");
+                    JSONObject info = data == null ? null : data.optJSONObject("info");
+                    JSONArray freshEpisodes = info == null ? null : info.optJSONArray("episode_list");
+                    if (freshEpisodes != null) {
+                        for (int i = 0; i < freshEpisodes.length(); i++) {
+                            JSONObject candidate = freshEpisodes.optJSONObject(i);
+                            if (candidate != null && candidate.optInt("index", i + 1) == targetEpisode) {
+                                selected = candidate;
+                                break;
+                            }
+                        }
+                    }
+                }
+            } catch (Exception error) {
+                diag("FreeReels subtitle refresh failed for episode " + targetEpisode + ": " + error.getMessage());
+            }
+            final JSONObject episodeData = selected;
+            runOnUiThread(() -> startFreeReelsMedia(cached, episodeData, targetEpisode));
+        }).start();
+    }
+
+    private void startFreeReelsMedia(JSONObject cached, JSONObject episodeData, int episodeNumber) {
+        if (!freeReelsMode || freeReelsEpisode != episodeNumber || player == null) return;
+        String stream = cached.optString("external_audio_h264_m3u8", "");
+        if (stream.isEmpty()) stream = cached.optString("video_url", "");
+        if (stream.isEmpty()) stream = cached.optString("m3u8_url", "");
+        if (stream.isEmpty()) stream = cached.optString("external_audio_h265_m3u8", "");
+        if (stream.isEmpty()) { toast("FreeReels Episode " + episodeNumber + " has no stream URL"); return; }
+        activeSourceUrl = stream;
+        MediaItem.Builder builder = new MediaItem.Builder().setUri(stream);
+        JSONArray subtitles = episodeData == null ? null : episodeData.optJSONArray("subtitle_list");
+        if (subtitles != null) {
+            java.util.ArrayList<MediaItem.SubtitleConfiguration> configs = new java.util.ArrayList<>();
+            for (int i = 0; i < subtitles.length(); i++) {
+                JSONObject sub = subtitles.optJSONObject(i);
+                if (sub == null) continue;
+                String subtitleUrl = sub.optString("vtt", "");
+                if (subtitleUrl.isEmpty()) subtitleUrl = sub.optString("subtitle", "");
+                if (subtitleUrl.isEmpty()) continue;
+                String language = sub.optString("language", "und");
+                String label = sub.optString("display_name", language);
+                String mime = subtitleUrl.toLowerCase(Locale.ROOT).contains(".srt")
+                        ? MimeTypes.APPLICATION_SUBRIP : MimeTypes.TEXT_VTT;
+                configs.add(new MediaItem.SubtitleConfiguration.Builder(Uri.parse(subtitleUrl))
+                        .setMimeType(mime).setLanguage(language).setLabel(label)
+                        .setSelectionFlags(0).build());
+            }
+            if (!configs.isEmpty()) builder.setSubtitleConfigurations(configs);
+        }
+        player.setMediaItem(builder.build());
         player.prepare();
         player.setPlayWhenReady(true);
     }
