@@ -26,7 +26,7 @@ public class FreeReelsRepository {
   if("gzip".equalsIgnoreCase(c.getContentEncoding()))in=new GZIPInputStream(in);
   ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1)out.write(b,0,n);in.close();c.disconnect();
   String raw=new String(out.toByteArray(),"UTF-8");JSONObject j=new JSONObject(raw);
-  if(status<200||status>=300||j.optInt("code",0)!=0)throw new Exception("FreeReels API error HTTP "+status+": "+j.optString("msg",raw));
+  int apiCode=j.optInt("code",0);if(status<200||status>=300||(apiCode!=0&&apiCode!=200))throw new Exception("FreeReels API error HTTP "+status+" code "+apiCode+": "+j.optString("message",j.optString("msg",raw)));
   return j;
  }
  public JSONObject home()throws Exception{return request("/frv2-api/homepage/v2/tab/index?tab_key=503&position_index=10000&rec_trigger=1&user_new_theater=false&is_app_coldstart=false","GET",null);}
