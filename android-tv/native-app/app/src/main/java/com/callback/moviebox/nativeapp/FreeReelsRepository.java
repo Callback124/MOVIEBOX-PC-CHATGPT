@@ -33,4 +33,9 @@ public class FreeReelsRepository {
  public JSONObject homeFeed(String next,String moduleKey)throws Exception{JSONObject b=new JSONObject();b.put("next",next);b.put("module_key",moduleKey);b.put("user_new_theater",false);return request("/frv2-api/homepage/v2/tab/feed","POST",b);}
  public JSONObject suggestions(String keyword)throws Exception{JSONObject b=new JSONObject();b.put("keyword",keyword);return request("/frv2-api/search/keywords","POST",b);}
  public JSONObject search(String keyword,String next)throws Exception{JSONObject b=new JSONObject();b.put("keyword",keyword);b.put("audio_tab_key","mix");b.put("next",next==null?"":next);return request("/frv2-api/search/drama","POST",b);}
+ public JSONObject dramaInfo(String seriesId)throws Exception{
+  String encoded=java.net.URLEncoder.encode(seriesId,"UTF-8");
+  return request("/frv2-api/drama/info_v2?series_id="+encoded+"&clip_content=","GET",null);
+ }
+
 }
