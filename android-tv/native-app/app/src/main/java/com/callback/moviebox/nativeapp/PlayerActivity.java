@@ -1003,7 +1003,7 @@ public class PlayerActivity extends Activity {
         sl.rightMargin = dp(14);
         sl.bottomMargin = dp(14);
         sheet.addView(sv, sl);
-        if (sheetMode == 4) {
+        if (sheetMode == 4 && volumeMode == 2) {
             LinearLayout boostBox = new LinearLayout(this);
             boostBox.setOrientation(LinearLayout.VERTICAL);
             boostBox.setPadding(dp(18), dp(4), dp(18), dp(18));
