@@ -29,6 +29,8 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.SeekBar;
+import android.media.audiofx.LoudnessEnhancer;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.Button;
@@ -138,6 +140,9 @@ public class PlayerActivity extends Activity {
     private boolean controlsVisible = true;
     private boolean sheetOpen = false;
     private boolean muted = false;
+    private int volumeMode = 1;
+    private int boostPercent = 100;
+    private LoudnessEnhancer loudnessEnhancer;
     private boolean audioNone = false;
     private boolean videoForced = false;
     private int sheetMode = 0; // 0 = Video/Audio tabs, 1 = Subtitles
@@ -199,6 +204,7 @@ public class PlayerActivity extends Activity {
     @Override
     protected void onDestroy() {
         diag("Lifecycle: onDestroy; finishing=" + isFinishing());
+        try { if (loudnessEnhancer != null) { loudnessEnhancer.setEnabled(false); loudnessEnhancer.release(); loudnessEnhancer = null; } } catch (Exception ignored) { }
         super.onDestroy();
         handler.removeCallbacksAndMessages(null);
         if (player != null) {
@@ -533,11 +539,11 @@ public class PlayerActivity extends Activity {
         timeView.setText("00:00 · 00:00");
         timeView.setShadowLayer(3f, 0f, 1f, Color.BLACK);
         row.addView(timeView, new LinearLayout.LayoutParams(0, WRAP, 1f));
-        volBtn = addButton(row, "ic_volume", "Volume", v -> toggleMute());
+        volBtn = addButton(row, "ic_volume", "Volume", v -> openSheet(4, 0));
         addButton(row, "ic_audio", "Audio", v -> openSheet(0, 1));
         addButton(row, "ic_quality", "Quality", v -> openSheet(0, 0));
-        addButton(row, "ic_fit", "Aspect", v -> cycleFit());
-        addButton(row, "ic_speed", "Speed", v -> cycleSpeed());
+        addButton(row, "ic_fit", "Aspect", v -> openSheet(2, 0));
+        addButton(row, "ic_speed", "Speed", v -> openSheet(3, 0));
         bottomBar.addView(row, new LinearLayout.LayoutParams(MATCH, WRAP));
         ui.addView(bottomBar, new FrameLayout.LayoutParams(MATCH, WRAP, Gravity.BOTTOM));
 
@@ -697,10 +703,39 @@ public class PlayerActivity extends Activity {
         (on ? lockBtn : playBtn).requestFocus();
     }
 
-    private void toggleMute() {
-        muted = !muted;
+    private void toggleMute() { volumeMode = muted ? 1 : 0; muted = volumeMode == 0; applyVolumeMode(); }
+
+    private void applyVolumeMode() {
+        muted = volumeMode == 0;
         if (player != null) player.setVolume(muted ? 0f : 1f);
-        volBtn.setImageResource(drawableId(muted ? "ic_volume_off" : "ic_volume"));
+        try {
+            if (player != null && volumeMode == 2 && boostPercent > 100) {
+                if (loudnessEnhancer == null) loudnessEnhancer = new LoudnessEnhancer(player.getAudioSessionId());
+                loudnessEnhancer.setTargetGain((boostPercent - 100) * 50);
+                loudnessEnhancer.setEnabled(true);
+            } else if (loudnessEnhancer != null) loudnessEnhancer.setEnabled(false);
+        } catch (Exception e) { diag("Volume boost unavailable: " + e.getMessage()); }
+        if (volBtn != null) volBtn.setImageResource(drawableId(muted ? "ic_volume_off" : "ic_volume"));
+    }
+
+    private List<Opt> aspectOpts() {
+        List<Opt> out = new ArrayList<>();
+        for (int i = 0; i < fitNames.length; i++) { final int n = i; out.add(new Opt(fitNames[i], fitIndex == i, () -> { fitIndex = n; playerView.setResizeMode(fitModes[n]); })); }
+        return out;
+    }
+
+    private List<Opt> speedOpts() {
+        List<Opt> out = new ArrayList<>();
+        for (int i = 0; i < speeds.length; i++) { final int n = i; out.add(new Opt(String.format(Locale.US, "%.2gx", speeds[i]).replace("0x", "x"), speedIndex == i, () -> { speedIndex = n; if (player != null) player.setPlaybackSpeed(speeds[n]); })); }
+        return out;
+    }
+
+    private List<Opt> volumeOpts() {
+        List<Opt> out = new ArrayList<>();
+        if (volumeMode != 2) out.add(new Opt("Mute", volumeMode == 0, () -> { volumeMode = 0; applyVolumeMode(); }));
+        out.add(new Opt("Normal", volumeMode == 1, () -> { volumeMode = 1; boostPercent = 100; applyVolumeMode(); }));
+        out.add(new Opt("Volume Boost", volumeMode == 2, () -> { volumeMode = 2; applyVolumeMode(); }));
+        return out;
     }
 
     private void cycleSpeed() {
@@ -919,8 +954,8 @@ public class PlayerActivity extends Activity {
         tabs.setOrientation(LinearLayout.HORIZONTAL);
         tabs.setBackgroundColor(0x1AFFFFFF);
         tabs.setPadding(dp(6), dp(6), dp(6), dp(6));
-        String[] names = sheetMode == 1 ? new String[]{"Subtitles"} : new String[]{"Resources", "Audio"};
-        int active = sheetMode == 1 ? 0 : sheetTab;
+        String[] names = sheetMode == 1 ? new String[]{"Subtitles"} : sheetMode == 2 ? new String[]{"Aspect"} : sheetMode == 3 ? new String[]{"Speed"} : sheetMode == 4 ? new String[]{"Volume"} : new String[]{"Resources", "Audio"};
+        int active = sheetMode == 1 || sheetMode >= 2 ? 0 : sheetTab;
         for (int i = 0; i < names.length; i++) {
             final int idx = i;
             TextView t = new TextView(this);
@@ -955,7 +990,7 @@ public class PlayerActivity extends Activity {
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
         sv.addView(list, new ViewGroup.LayoutParams(MATCH, WRAP));
-        List<Opt> opts = sheetMode == 1 ? subtitleOpts() : (sheetTab == 0 ? videoOpts() : dubOpts());
+        List<Opt> opts = sheetMode == 1 ? subtitleOpts() : sheetMode == 2 ? aspectOpts() : sheetMode == 3 ? speedOpts() : sheetMode == 4 ? volumeOpts() : (sheetTab == 0 ? videoOpts() : dubOpts());
         View selected = null;
         for (int i = 0; i < opts.size(); i++) {
             View r = optRow(opts.get(i), i);
@@ -968,6 +1003,28 @@ public class PlayerActivity extends Activity {
         sl.rightMargin = dp(14);
         sl.bottomMargin = dp(14);
         sheet.addView(sv, sl);
+        if (sheetMode == 4) {
+            LinearLayout boostBox = new LinearLayout(this);
+            boostBox.setOrientation(LinearLayout.VERTICAL);
+            boostBox.setPadding(dp(18), dp(4), dp(18), dp(18));
+            TextView boostLabel = new TextView(this);
+            boostLabel.setText("Volume Boost  " + boostPercent + "%");
+            boostLabel.setTextColor(MINT);
+            boostLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
+            boostBox.addView(boostLabel);
+            SeekBar boostSeek = new SeekBar(this);
+            boostSeek.setMax(100);
+            boostSeek.setProgress(Math.max(0, Math.min(100, boostPercent - 100)));
+            boostSeek.setFocusable(true);
+            boostSeek.setContentDescription("Volume boost from 100 to 200 percent");
+            boostSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) { if (fromUser) { boostPercent = 100 + progress; volumeMode = 2; muted = false; applyVolumeMode(); boostLabel.setText("Volume Boost  " + boostPercent + "%"); } }
+                @Override public void onStartTrackingTouch(SeekBar bar) { }
+                @Override public void onStopTrackingTouch(SeekBar bar) { }
+            });
+            boostBox.addView(boostSeek, new LinearLayout.LayoutParams(MATCH, dp(48)));
+            sheet.addView(boostBox);
+        }
 
         View target = null;
         if (focusSelected) {
