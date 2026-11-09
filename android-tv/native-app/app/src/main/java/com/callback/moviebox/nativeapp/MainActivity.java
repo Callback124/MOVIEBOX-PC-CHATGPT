@@ -109,7 +109,8 @@ public class MainActivity extends Activity {
  }
  private void search(String q){search(q,1);}
  private void search(String q,int page){
-  if(getSelectedServer()==4){freeReelsSearch(q,page);return;}\n  if(q==null||q.trim().isEmpty())return;
+  if(getSelectedServer()==4){freeReelsSearch(q,page);return;}
+  if(q==null||q.trim().isEmpty())return;
   final String keyword=q.trim();
   if(page==1){JSONArray old=readCollection("search_history"),next=new JSONArray();next.put(keyword);for(int si=0;si<old.length();si++){String prior=old.optString(si,"");if(!prior.equalsIgnoreCase(keyword)&&!prior.isEmpty()&&next.length()<12)next.put(prior);}getSharedPreferences(PREFS,MODE_PRIVATE).edit().putString(scopedKey("search_history"),next.toString()).apply();}
   if(page==1){
@@ -361,7 +362,7 @@ public class MainActivity extends Activity {
  private void appendFreeReelsCards(LinearLayout grid,JSONArray items,boolean searchResults){
   int cols=6;int width=Math.max(dp(42),(getResources().getDisplayMetrics().widthPixels-dp(60)-dp(6)*5)/6);
   for(int i=0;i<items.length();i++){JSONObject item=items.optJSONObject(i);if(item==null)continue;String key=item.optString("series_id",item.optString("series_key",""));if(key.isEmpty())continue;if(searchResults&&!freeSearchSeen.add(key))continue;
-   if(searchResults){if(freeSearchRow==null||freeSearchRowCount>=cols){freeSearchRow=new LinearLayout(this);freeSearchRow.setOrientation(0);freeSearchRow.setGravity(Gravity.TOP);freeSearchRow.setPadding(dp(24),dp(8),dp(24),dp(8));grid.addView(freeSearchRow,new LinearLayout.LayoutParams(-1,-2));freeSearchRowCount++;freeSearchRowCount=1;}}
+   if(searchResults){if(freeSearchRow==null||freeSearchRowCount>=cols){freeSearchRow=new LinearLayout(this);freeSearchRow.setOrientation(0);freeSearchRow.setGravity(Gravity.TOP);freeSearchRow.setPadding(dp(24),dp(8),dp(24),dp(8));grid.addView(freeSearchRow,new LinearLayout.LayoutParams(-1,-2));freeSearchRowCount=0;}}
    else if(freeHomeRow==null||freeHomeRowCount>=cols){freeHomeRow=new LinearLayout(this);freeHomeRow.setOrientation(0);freeHomeRow.setGravity(Gravity.TOP);freeHomeRow.setPadding(dp(24),dp(8),dp(24),dp(8));grid.addView(freeHomeRow,new LinearLayout.LayoutParams(-1,-2));freeHomeRowCount=0;}
    LinearLayout row=searchResults?freeSearchRow:freeHomeRow;LinearLayout card=new LinearLayout(this);card.setOrientation(1);card.setFocusable(true);card.setClickable(true);card.setPadding(dp(3),dp(3),dp(3),dp(8));card.setBackground(bg(PANEL,0));
    ImageView posterView=new ImageView(this);posterView.setScaleType(ImageView.ScaleType.CENTER_CROP);posterView.setBackgroundColor(0xff252525);card.addView(posterView,new LinearLayout.LayoutParams(-1,(int)(width*16f/9f)));
