@@ -542,7 +542,6 @@ public class PlayerActivity extends Activity {
         sp.setMargins(0, 0, dp(16), dp(16));
         sheetLayer.addView(sheet, sp);
 
-        if (getIntent().getBooleanExtra("storyTv", false)) addDiagnosticsPanel();
         setContentView(root);
     }
 
