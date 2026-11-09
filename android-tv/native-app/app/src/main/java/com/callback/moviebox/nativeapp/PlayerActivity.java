@@ -129,7 +129,7 @@ public class PlayerActivity extends Activity {
     private int freeReelsPreferredQualityHeight = 0;
     private LoudnessEnhancer loudnessEnhancer;
     private int volumeBoostPercent = 100;
-    private boolean volumeMuted = false;
+    private int volumeMode = 1; // 0 = Mute, 1 = Normal (default), 2 = Boost
     private JSONArray freeReelsEpisodes = new JSONArray();
     private String storyTvShowId = "";
     private int storyTvEpisode = 1;
@@ -711,8 +711,56 @@ public class PlayerActivity extends Activity {
     private void toggleMute() { volumeMuted = !volumeMuted; applyVolumeBoost(); }
     private List<Opt> aspectOpts() { List<Opt> out=new ArrayList<>(); for(int i=0;i<fitNames.length;i++){final int n=i;out.add(new Opt(fitNames[i],fitIndex==i,()->{fitIndex=n;playerView.setResizeMode(fitModes[n]);renderSheet(false);}));}return out; }
     private List<Opt> speedOpts() { List<Opt> out=new ArrayList<>();for(int i=0;i<speeds.length;i++){final int n=i;out.add(new Opt(String.format(Locale.US,"%.2g×",speeds[i]),speedIndex==i,()->{speedIndex=n;if(player!=null)player.setPlaybackSpeed(speeds[n]);renderSheet(false);}));}return out; }
-    private List<Opt> volumeOpts() { List<Opt> out=new ArrayList<>();if(volumeBoostPercent==100)out.add(new Opt("Mute",volumeMuted,()->{volumeMuted=!volumeMuted;applyVolumeBoost();renderSheet(false);}));out.add(new Opt("Volume boost "+volumeBoostPercent+"%",volumeBoostPercent>100,()->{LinearLayout p=new LinearLayout(this);p.setOrientation(LinearLayout.VERTICAL);p.setPadding(dp(18),dp(12),dp(18),dp(12));TextView val=new TextView(this);val.setText("Boost: "+volumeBoostPercent+"%");val.setTextColor(Color.WHITE);val.setTextSize(18);p.addView(val);android.widget.SeekBar bar=new android.widget.SeekBar(this);bar.setMax(100);bar.setProgress(volumeBoostPercent-100);p.addView(bar);bar.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener(){public void onProgressChanged(android.widget.SeekBar b,int x,boolean u){volumeBoostPercent=100+x;volumeMuted=false;val.setText("Boost: "+volumeBoostPercent+"%");applyVolumeBoost();}public void onStartTrackingTouch(android.widget.SeekBar b){}public void onStopTrackingTouch(android.widget.SeekBar b){}});sheet.removeAllViews();sheet.addView(p,new LinearLayout.LayoutParams(MATCH,WRAP));bar.setFocusable(true);bar.requestFocus();}));return out; }
-    private void applyVolumeBoost(){if(player==null)return;try{if(loudnessEnhancer==null)loudnessEnhancer=new LoudnessEnhancer(player.getAudioSessionId());loudnessEnhancer.setTargetGain((volumeBoostPercent-100)*100);loudnessEnhancer.setEnabled(volumeBoostPercent>100);}catch(Exception e){diag("Volume boost unavailable: "+e.getMessage());}player.setVolume(volumeMuted?0f:1f);if(volBtn!=null)volBtn.setImageResource(drawableId(volumeMuted?"ic_volume_off":"ic_volume"));}
+    private List<Opt> volumeOpts() {
+        List<Opt> out = new ArrayList<>();
+        if (volumeMode != 2) {
+            out.add(new Opt("Mute", volumeMode == 0, () -> {
+                volumeMode = 0;
+                applyVolumeBoost();
+                renderSheet(false);
+            }));
+        }
+        out.add(new Opt("Normal", volumeMode == 1, () -> {
+            volumeMode = 1;
+            volumeBoostPercent = 100;
+            applyVolumeBoost();
+            renderSheet(false);
+        }));
+        out.add(new Opt("Boost  " + volumeBoostPercent + "%", volumeMode == 2, () -> {
+            volumeMode = 2;
+            volumeMuted = false;
+            if (volumeBoostPercent <= 100) volumeBoostPercent = 110;
+            LinearLayout p = new LinearLayout(this);
+            p.setOrientation(LinearLayout.VERTICAL);
+            p.setPadding(dp(18), dp(12), dp(18), dp(12));
+            TextView val = new TextView(this);
+            val.setText("Boost: " + volumeBoostPercent + "%");
+            val.setTextColor(Color.WHITE);
+            val.setTextSize(18);
+            p.addView(val);
+            android.widget.SeekBar bar = new android.widget.SeekBar(this);
+            bar.setMax(100);
+            bar.setProgress(volumeBoostPercent - 100);
+            bar.setFocusable(true);
+            bar.setFocusableInTouchMode(true);
+            p.addView(bar);
+            bar.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
+                public void onProgressChanged(android.widget.SeekBar b, int x, boolean user) {
+                    volumeBoostPercent = 100 + x;
+                    val.setText("Boost: " + volumeBoostPercent + "%");
+                    applyVolumeBoost();
+                }
+                public void onStartTrackingTouch(android.widget.SeekBar b) { }
+                public void onStopTrackingTouch(android.widget.SeekBar b) { }
+            });
+            applyVolumeBoost();
+            sheet.removeAllViews();
+            sheet.addView(p, new LinearLayout.LayoutParams(MATCH, WRAP));
+            bar.requestFocus();
+        }));
+        return out;
+    }
+    private void applyVolumeBoost(){if(player==null)return;try{if(loudnessEnhancer==null)loudnessEnhancer=new LoudnessEnhancer(player.getAudioSessionId());loudnessEnhancer.setTargetGain((volumeBoostPercent-100)*100);loudnessEnhancer.setEnabled(volumeMode==2&&volumeBoostPercent>100);}catch(Exception e){diag("Volume boost unavailable: "+e.getMessage());}player.setVolume(volumeMode==0?0f:1f);if(volBtn!=null)volBtn.setImageResource(drawableId(volumeMode==0?"ic_volume_off":"ic_volume"));}
 
     private void cycleSpeed() { openSheet(3,0); }
     private void cycleFit() { openSheet(2,0); }
