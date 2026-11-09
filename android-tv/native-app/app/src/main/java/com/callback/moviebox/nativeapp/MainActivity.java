@@ -376,7 +376,7 @@ public class MainActivity extends Activity {
    LinearLayout row=searchResults?freeSearchRow:freeHomeRow;LinearLayout card=new LinearLayout(this);card.setOrientation(1);card.setFocusable(true);card.setClickable(true);card.setPadding(dp(3),dp(3),dp(3),dp(8));card.setBackground(bg(PANEL,0));
    FrameLayout posterFrame=new FrameLayout(this);posterFrame.setBackgroundColor(0xff252525);card.addView(posterFrame,new LinearLayout.LayoutParams(-1,(int)(width*16f/9f)));
    ImageView posterView=new ImageView(this);posterView.setScaleType(ImageView.ScaleType.CENTER_CROP);posterFrame.addView(posterView,new FrameLayout.LayoutParams(-1,-1));
-   String image=item.optString("cover","");if(image.startsWith("//"))image="https:"+image;if(!image.isEmpty())Glide.with(this).load(image).placeholder(new android.graphics.drawable.ColorDrawable(0xff252525)).centerCrop().into(posterView);
+   String image=item.optString("cover","");if(image.startsWith("//"))image="https:"+image;if(!image.isEmpty())Glide.with(this).load(image).thumbnail(0.35f).override(width,(int)(width*16f/9f)).placeholder(new android.graphics.drawable.ColorDrawable(0xff252525)).centerCrop().diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.ALL).dontAnimate().into(posterView);
    
    TextView name=txt(item.optString("title",item.optString("name","Untitled Drama")),11,WHITE,true);name.setMaxLines(2);name.setEllipsize(TextUtils.TruncateAt.END);name.setPadding(dp(3),dp(5),dp(3),0);card.addView(name);
    card.setOnFocusChangeListener((v,focus)->{card.setBackground(bg(focus?0xff302024:PANEL,focus?RED:0));card.animate().scaleX(focus?1.035f:1f).scaleY(focus?1.035f:1f).setDuration(100).start();card.setElevation(focus?dp(8):0);});
@@ -387,7 +387,8 @@ public class MainActivity extends Activity {
   if(previousPageViews==null){previousPageViews=new ArrayList<>();for(int i=0;i<content.getChildCount();i++)previousPageViews.add(content.getChildAt(i));previousScrollY=pageScroll.getScrollY();previousTopVisible=top.getVisibility()==View.VISIBLE;}
   top.setVisibility(View.GONE);pageScroll.setOnScrollChangeListener(null);content.removeAllViews();pageScroll.scrollTo(0,0);
   TextView loading=txt("Loading drama details…",17,MUTED,false);loading.setPadding(dp(48),dp(35),dp(48),dp(25));content.addView(loading);
-  String seriesId=item.optString("series_id",item.optString("series_key",item.optString("key","")));
+  String seriesId=item.optString("series_id",item.optString("series_key",item.optString("key",item.optString("id",""))));
+  if(seriesId.isEmpty()){content.removeAllViews();TextView error=txt("FreeReels item is missing series ID. Fields: "+item.names(),14,WHITE,false);error.setPadding(dp(48),dp(25),dp(48),dp(15));content.addView(error);return;}
   new Thread(()->{try{
    JSONObject response=freeReelsApi.dramaInfo(seriesId);JSONObject data=response.optJSONObject("data");JSONObject info=data==null?null:data.optJSONObject("info");if(info==null)throw new Exception("API response did not contain data.info");
    JSONArray episodes=info.optJSONArray("episode_list");if(episodes==null)episodes=new JSONArray();final JSONObject drama=info;final JSONArray eps=episodes;
@@ -436,7 +437,7 @@ public class MainActivity extends Activity {
   if(chosen==null){new AlertDialog.Builder(this).setTitle("Episode unavailable").setMessage("FreeReels did not return this episode.").setPositiveButton("OK",null).show();return;}
   String stream=chosen.optString("external_audio_h264_m3u8","");if(stream.isEmpty())stream=chosen.optString("video_url","");if(stream.isEmpty())stream=chosen.optString("m3u8_url","");if(stream.isEmpty())stream=chosen.optString("external_audio_h265_m3u8","");
   if(stream.isEmpty()){new AlertDialog.Builder(this).setTitle("Stream unavailable").setMessage("No playable URL was returned for Episode "+episodeIndex).setPositiveButton("OK",null).show();return;}
-  Intent intent=new Intent(this,PlayerActivity.class);intent.putExtra("freeReels",true);intent.putExtra("url",stream);intent.putExtra("title",info.optString("name","FreeReels"));intent.putExtra("episode",episodeIndex);intent.putExtra("episodeCount",episodes.length());intent.putExtra("freeReelsEpisodes",episodes.toString());startActivity(intent);
+  Intent intent=new Intent(this,PlayerActivity.class);intent.putExtra("freeReels",true);intent.putExtra("url",stream);intent.putExtra("title",info.optString("name","FreeReels"));intent.putExtra("episode",episodeIndex);intent.putExtra("episodeCount",episodes.length());JSONArray compactEpisodes=new JSONArray();for(int ei=0;ei<episodes.length();ei++){JSONObject source=episodes.optJSONObject(ei);if(source==null)continue;JSONObject compact=new JSONObject();try{compact.put("index",source.optInt("index",ei+1));compact.put("external_audio_h264_m3u8",source.optString("external_audio_h264_m3u8",""));compact.put("video_url",source.optString("video_url",""));compact.put("m3u8_url",source.optString("m3u8_url",""));compact.put("external_audio_h265_m3u8",source.optString("external_audio_h265_m3u8",""));compact.put("name",source.optString("name",""));}catch(Exception ignored){}compactEpisodes.put(compact);}intent.putExtra("freeReelsEpisodes",compactEpisodes.toString());startActivity(intent);
  }
  private void freeReelsSearch(String query,int page){
   if(query==null||query.trim().isEmpty())return;String keyword=query.trim();
