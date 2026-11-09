@@ -361,7 +361,7 @@ public class MainActivity extends Activity {
  }
  private void appendFreeReelsCards(LinearLayout grid,JSONArray items,boolean searchResults){
   int cols=6;int width=Math.max(dp(42),(getResources().getDisplayMetrics().widthPixels-dp(60)-dp(6)*5)/6);
-  for(int i=0;i<items.length();i++){JSONObject item=items.optJSONObject(i);if(item==null)continue;String key=item.optString("series_id",item.optString("series_key",""));if(key.isEmpty())continue;if(searchResults&&!freeSearchSeen.add(key))continue;
+  for(int i=0;i<items.length();i++){JSONObject item=items.optJSONObject(i);if(item==null)continue;String key=item.optString("series_id",item.optString("series_key",item.optString("key","")));if(key.isEmpty())continue;if(searchResults&&!freeSearchSeen.add(key))continue;
    if(searchResults){if(freeSearchRow==null||freeSearchRowCount>=cols){freeSearchRow=new LinearLayout(this);freeSearchRow.setOrientation(0);freeSearchRow.setGravity(Gravity.TOP);freeSearchRow.setPadding(dp(24),dp(8),dp(24),dp(8));grid.addView(freeSearchRow,new LinearLayout.LayoutParams(-1,-2));freeSearchRowCount=0;}}
    else if(freeHomeRow==null||freeHomeRowCount>=cols){freeHomeRow=new LinearLayout(this);freeHomeRow.setOrientation(0);freeHomeRow.setGravity(Gravity.TOP);freeHomeRow.setPadding(dp(24),dp(8),dp(24),dp(8));grid.addView(freeHomeRow,new LinearLayout.LayoutParams(-1,-2));freeHomeRowCount=0;}
    LinearLayout row=searchResults?freeSearchRow:freeHomeRow;LinearLayout card=new LinearLayout(this);card.setOrientation(1);card.setFocusable(true);card.setClickable(true);card.setPadding(dp(3),dp(3),dp(3),dp(8));card.setBackground(bg(PANEL,0));
