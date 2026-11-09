@@ -1763,15 +1763,35 @@ public class PlayerActivity extends Activity {
                 for (int i = 0; i < streams.length(); i++) {
                     JSONObject raw = streams.optJSONObject(i);
                     if (raw == null) continue;
-                    String url = raw.optString("url", "");
+                    String url = raw.optString("url", raw.optString("playUrl", raw.optString("src", "")));
                     if (url.isEmpty()) continue;
-                    JSONObject source = new JSONObject();
-                    source.put("url", url);
-                    source.put("format", raw.optString("format", "MP4"));
-                    String resolution = raw.optString("resolutions", "");
-                    source.put("quality", resolution.isEmpty() ? raw.optString("format", "Stream") : resolution + "p");
-                    source.put("resolutions", resolution);
-                    ordered.add(source);
+                    String format = raw.optString("format", raw.optString("type", "MP4"));
+                    Object rawResolutions = raw.opt("resolutions");
+                    if (rawResolutions == null || rawResolutions == JSONObject.NULL) rawResolutions = raw.opt("resolution");
+                    if (rawResolutions == null || rawResolutions == JSONObject.NULL) rawResolutions = raw.opt("quality");
+                    List<String> qualities = new ArrayList<>();
+                    if (rawResolutions instanceof JSONArray) {
+                        JSONArray values = (JSONArray) rawResolutions;
+                        for (int q = 0; q < values.length(); q++) addLookrQuality(qualities, values.opt(q));
+                    } else if (rawResolutions != null) {
+                        String value = String.valueOf(rawResolutions);
+                        for (String token : value.split("[,;|/\\s]+")) addLookrQuality(qualities, token);
+                    }
+                    if (qualities.isEmpty()) {
+                        int h = raw.optInt("height", 0);
+                        if (h > 0) qualities.add(h + "p");
+                    }
+                    if (qualities.isEmpty()) qualities.add(format.isEmpty() ? "Auto" : format);
+                    for (String quality : qualities) {
+                        JSONObject source = new JSONObject();
+                        source.put("url", url);
+                        source.put("format", format);
+                        source.put("quality", quality);
+                        source.put("resolutions", quality.replaceAll("[^0-9]", ""));
+                        boolean duplicate = false;
+                        for (JSONObject prior : ordered) if (url.equals(prior.optString("url")) && quality.equals(prior.optString("quality"))) { duplicate = true; break; }
+                        if (!duplicate) ordered.add(source);
+                    }
                 }
                 Collections.sort(ordered, (a, b) -> Integer.compare(
                         parseLookrResolution(b.optString("resolutions", "")),
@@ -1804,6 +1824,17 @@ public class PlayerActivity extends Activity {
                 showControls();
             });
         }).start();
+    }
+
+    private void addLookrQuality(List<String> out, Object raw) {
+        if (raw == null || raw == JSONObject.NULL) return;
+        String value = String.valueOf(raw).trim();
+        if (value.isEmpty()) return;
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d{3,4})").matcher(value);
+        if (m.find()) {
+            String q = m.group(1) + "p";
+            if (!out.contains(q)) out.add(q);
+        } else if (!out.contains(value)) out.add(value);
     }
 
     private int parseLookrResolution(String value) {
