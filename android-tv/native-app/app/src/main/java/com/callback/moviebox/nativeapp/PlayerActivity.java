@@ -123,8 +123,7 @@ public class PlayerActivity extends Activity {
     private boolean freeReelsMode = false;
     private int freeReelsEpisode = 1;
     private String freeReelsSeriesId = "";
-    private String freeReelsPreferredSubtitleLanguage = "";
-    private boolean freeReelsApplyPreferredSubtitle = false;
+    private int freeReelsPreferredQualityHeight = 0;
     private JSONArray freeReelsEpisodes = new JSONArray();
     private String storyTvShowId = "";
     private int storyTvEpisode = 1;
@@ -280,6 +279,7 @@ public class PlayerActivity extends Activity {
                 .setMediaSourceFactory(new DefaultMediaSourceFactory(dataSourceFactory))
                 .build();
         playerView.setPlayer(player);
+        player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build());
         player.addListener(new Player.Listener() {
             @Override
             public void onPlayerError(PlaybackException error) {
@@ -321,10 +321,7 @@ public class PlayerActivity extends Activity {
 
             @Override
             public void onTracksChanged(Tracks tracks) {
-                if (freeReelsMode && freeReelsApplyPreferredSubtitle
-                        && !freeReelsPreferredSubtitleLanguage.isEmpty()) {
-                    applyPreferredFreeReelsSubtitle();
-                }
+                if (freeReelsMode && freeReelsPreferredQualityHeight > 0) applyPreferredFreeReelsQuality();
                 if (sheetOpen) renderSheet(false);
             }
         });
@@ -369,8 +366,6 @@ public class PlayerActivity extends Activity {
             }).start();
         }
         String format = getIntent().getStringExtra("format");
-        JSONArray freeReelsSubtitles;
-        try { freeReelsSubtitles = new JSONArray(getIntent().getStringExtra("freeReelsSubtitles") == null ? "[]" : getIntent().getStringExtra("freeReelsSubtitles")); } catch (Exception ignored) { freeReelsSubtitles = new JSONArray(); }
         long pos = getIntent().getLongExtra("pos", 0L);
         titleView.setText(formatEpisodeTitle(basePlayerTitle));
         if (url != null && !url.trim().isEmpty()) {
@@ -382,23 +377,6 @@ public class PlayerActivity extends Activity {
                 if (f.contains("HLS") || f.contains("M3U8")) mediaItemBuilder.setMimeType("application/x-mpegURL");
                 else if (f.contains("DASH") || f.contains("MPD")) mediaItemBuilder.setMimeType("application/dash+xml");
                 else if (f.contains("MP4")) mediaItemBuilder.setMimeType("video/mp4");
-            }
-            if (freeReelsMode) {
-                java.util.ArrayList<MediaItem.SubtitleConfiguration> subtitleConfigs = new java.util.ArrayList<>();
-                for (int si = 0; si < freeReelsSubtitles.length(); si++) {
-                    JSONObject sub = freeReelsSubtitles.optJSONObject(si);
-                    if (sub == null) continue;
-                    String subUrl = sub.optString("vtt", "");
-                    if (subUrl.isEmpty()) subUrl = sub.optString("subtitle", "");
-                    if (subUrl.isEmpty()) continue;
-                    String lang = sub.optString("language", "und");
-                    String label = sub.optString("display_name", lang);
-                    String mime = subUrl.toLowerCase(Locale.ROOT).contains(".srt")
-                            ? MimeTypes.APPLICATION_SUBRIP : MimeTypes.TEXT_VTT;
-                    subtitleConfigs.add(new MediaItem.SubtitleConfiguration.Builder(Uri.parse(subUrl))
-                            .setMimeType(mime).setLanguage(lang).setLabel(label).setSelectionFlags(0).build());
-                }
-                if (!subtitleConfigs.isEmpty()) mediaItemBuilder.setSubtitleConfigurations(subtitleConfigs);
             }
             player.setMediaItem(mediaItemBuilder.build());
             player.prepare();
@@ -558,7 +536,6 @@ public class PlayerActivity extends Activity {
         volBtn = addButton(row, "ic_volume", "Volume", v -> toggleMute());
         addButton(row, "ic_audio", "Audio", v -> openSheet(0, 1));
         addButton(row, "ic_quality", "Quality", v -> openSheet(0, 0));
-        addButton(row, "ic_cc", "Subtitles", v -> openSheet(1, 0));
         addButton(row, "ic_fit", "Aspect", v -> cycleFit());
         addButton(row, "ic_speed", "Speed", v -> cycleSpeed());
         bottomBar.addView(row, new LinearLayout.LayoutParams(MATCH, WRAP));
@@ -1051,17 +1028,15 @@ public class PlayerActivity extends Activity {
             b.setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false);
             audioNone = false;
         } else if (type == C.TRACK_TYPE_TEXT) {
-            b.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false);
+            return;
         } else if (type == C.TRACK_TYPE_VIDEO) {
             videoForced = true;
+            if (freeReelsMode) freeReelsPreferredQualityHeight = r.format.height;
+            b.clearOverridesOfType(C.TRACK_TYPE_VIDEO);
+            b.setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false);
         }
         b.setOverrideForType(new TrackSelectionOverride(r.group.getMediaTrackGroup(), r.index));
         player.setTrackSelectionParameters(b.build());
-        if (freeReelsMode && type == C.TRACK_TYPE_TEXT) {
-            String language = r.format.language;
-            freeReelsPreferredSubtitleLanguage = language == null ? "" : language.trim();
-            freeReelsApplyPreferredSubtitle = !freeReelsPreferredSubtitleLanguage.isEmpty();
-        }
     }
 
     private void disableType(int type) {
@@ -1554,21 +1529,6 @@ public class PlayerActivity extends Activity {
         }).start();
     }
 
-    private void applyPreferredFreeReelsSubtitle() {
-        if (player == null || freeReelsPreferredSubtitleLanguage.isEmpty()) return;
-        List<TrackRef> refs = trackRefs(C.TRACK_TYPE_TEXT);
-        for (TrackRef ref : refs) {
-            String language = ref.format.language;
-            if (language != null && language.equalsIgnoreCase(freeReelsPreferredSubtitleLanguage)) {
-                freeReelsApplyPreferredSubtitle = false;
-                selectTrack(ref);
-                diag("FreeReels preferred subtitle restored: " + language);
-                return;
-            }
-        }
-        // Keep it pending until ExoPlayer finishes discovering the subtitle tracks.
-    }
-
     private void startFreeReelsMedia(JSONObject cached, JSONObject episodeData, int episodeNumber) {
         if (!freeReelsMode || freeReelsEpisode != episodeNumber || player == null) return;
         String stream = cached.optString("external_audio_h264_m3u8", "");
@@ -1578,29 +1538,28 @@ public class PlayerActivity extends Activity {
         if (stream.isEmpty()) { toast("FreeReels Episode " + episodeNumber + " has no stream URL"); return; }
         activeSourceUrl = stream;
         MediaItem.Builder builder = new MediaItem.Builder().setUri(stream);
-        JSONArray subtitles = episodeData == null ? null : episodeData.optJSONArray("subtitle_list");
-        if (subtitles != null) {
-            java.util.ArrayList<MediaItem.SubtitleConfiguration> configs = new java.util.ArrayList<>();
-            for (int i = 0; i < subtitles.length(); i++) {
-                JSONObject sub = subtitles.optJSONObject(i);
-                if (sub == null) continue;
-                String subtitleUrl = sub.optString("vtt", "");
-                if (subtitleUrl.isEmpty()) subtitleUrl = sub.optString("subtitle", "");
-                if (subtitleUrl.isEmpty()) continue;
-                String language = sub.optString("language", "und");
-                String label = sub.optString("display_name", language);
-                String mime = subtitleUrl.toLowerCase(Locale.ROOT).contains(".srt")
-                        ? MimeTypes.APPLICATION_SUBRIP : MimeTypes.TEXT_VTT;
-                configs.add(new MediaItem.SubtitleConfiguration.Builder(Uri.parse(subtitleUrl))
-                        .setMimeType(mime).setLanguage(language).setLabel(label)
-                        .setSelectionFlags(0).build());
-            }
-            if (!configs.isEmpty()) builder.setSubtitleConfigurations(configs);
-        }
         player.setMediaItem(builder.build());
-        freeReelsApplyPreferredSubtitle = !freeReelsPreferredSubtitleLanguage.isEmpty();
         player.prepare();
         player.setPlayWhenReady(true);
+    }
+
+    private void applyPreferredFreeReelsQuality() {
+        if (player == null || !freeReelsMode || freeReelsPreferredQualityHeight <= 0) return;
+        List<TrackRef> refs = trackRefs(C.TRACK_TYPE_VIDEO);
+        TrackRef best = null;
+        int bestDistance = Integer.MAX_VALUE;
+        for (TrackRef ref : refs) {
+            if (ref.format.height <= 0) continue;
+            int distance = Math.abs(ref.format.height - freeReelsPreferredQualityHeight);
+            if (distance < bestDistance) { best = ref; bestDistance = distance; }
+        }
+        if (best == null || best.group.isTrackSelected(best.index)) return;
+        TrackSelectionParameters.Builder builder = player.getTrackSelectionParameters().buildUpon()
+                .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
+                .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false);
+        builder.setOverrideForType(new TrackSelectionOverride(best.group.getMediaTrackGroup(), best.index));
+        videoForced = true;
+        player.setTrackSelectionParameters(builder.build());
     }
 
     private void playStoryTvEpisode(int episodeNumber) {
