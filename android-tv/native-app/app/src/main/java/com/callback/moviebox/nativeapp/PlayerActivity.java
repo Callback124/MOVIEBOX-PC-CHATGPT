@@ -285,6 +285,9 @@ public class PlayerActivity extends Activity {
         player = new ExoPlayer.Builder(this)
                 .setMediaSourceFactory(new DefaultMediaSourceFactory(dataSourceFactory))
                 .build();
+        // Hide/disable subtitle tracks globally for every provider and stream type.
+        player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon()
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build());
         playerView.setPlayer(player);
         player.addListener(new Player.Listener() {
             @Override
@@ -713,7 +716,7 @@ public class PlayerActivity extends Activity {
 
     private void cycleSpeed() { openSheet(3,0); }
     private void cycleFit() { openSheet(2,0); }
-    private void applyPreferredFreeReelsQuality(){if(player==null||!freeReelsMode||freeReelsPreferredQualityHeight<=0)return;for(TrackRef ref:trackRefs(C.TRACK_TYPE_VIDEO)){if(ref.format.height==freeReelsPreferredQualityHeight&&!ref.group.isTrackSelected(ref.index)){TrackSelectionParameters.Builder b=player.getTrackSelectionParameters().buildUpon();b.setOverrideForType(new TrackSelectionOverride(ref.group.getMediaTrackGroup(),ref.index));player.setTrackSelectionParameters(b.build());return;}}}
+    private void applyPreferredFreeReelsQuality(){if(player==null||!freeReelsMode||freeReelsPreferredQualityHeight<=0)return;for(TrackRef ref:trackRefs(C.TRACK_TYPE_VIDEO)){if(ref.format.height==freeReelsPreferredQualityHeight&&!ref.group.isTrackSelected(ref.index)){TrackSelectionParameters.Builder b=player.getTrackSelectionParameters().buildUpon().clearOverridesOfType(C.TRACK_TYPE_VIDEO);b.setTrackTypeDisabled(C.TRACK_TYPE_VIDEO,false);b.setOverrideForType(new TrackSelectionOverride(ref.group.getMediaTrackGroup(),ref.index));player.setTrackSelectionParameters(b.build());return;}}}
 
     private void updateEpisodeSubtitle() {
         if (episodeSubtitleView == null) return;
