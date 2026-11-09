@@ -30,8 +30,27 @@ public class StoryTvRepository {
  public JSONObject episodeList(String showId)throws Exception{return request("/feedservice/v1/episode/list/"+URLEncoder.encode(showId,"UTF-8"),"GET",null);}
  public JSONObject episodeMetadata(String showId,Integer cursor)throws Exception{String path="/feedservice/v1/episode/metadata/"+URLEncoder.encode(showId,"UTF-8");if(cursor!=null)path+="?cursor="+cursor+"&dir=NEXT";return request(path,"GET",null);}
  public JSONObject search(String q)throws Exception{return search(q,0,20);}
+ private boolean isIncompleteSearch(JSONObject response,int page,int requestedSize){
+  JSONObject data=response==null?null:response.optJSONObject("data");if(data==null)return false;
+  JSONArray content=data.optJSONArray("content");if(content==null)return false;
+  int total=data.optInt("totalElements",-1);if(total<0)return false;
+  int actualPage=data.optInt("number",page),actualSize=data.optInt("size",requestedSize);
+  int expected=Math.min(Math.max(1,actualSize),Math.max(0,total-Math.max(0,actualPage)*Math.max(1,actualSize)));
+  return content.length()<expected;
+ }
  public JSONObject search(String q,int page,int size)throws Exception{
   String encoded=URLEncoder.encode(q==null?"":q.trim(),"UTF-8").replace("+","%20");
-  return request("/searchservice/v1/search/"+encoded+"?page="+Math.max(0,page)+"&size="+Math.max(1,size),"GET",null);
+  String path="/searchservice/v1/search/"+encoded+"?page="+Math.max(0,page)+"&size="+Math.max(1,size);
+  Exception last=null;
+  for(int attempt=0;attempt<3;attempt++){
+   try{
+    JSONObject response=request(path,"GET",null);
+    if(!isIncompleteSearch(response,Math.max(0,page),Math.max(1,size)))return response;
+    last=new Exception("Story TV returned an incomplete search page; retrying");
+   }catch(Exception e){last=e;}
+   if(attempt<2)try{Thread.sleep(350L*(attempt+1));}catch(InterruptedException interrupted){Thread.currentThread().interrupt();throw interrupted;}
+  }
+  if(last!=null)throw last;
+  throw new Exception("Story TV search failed");
  }
 }
