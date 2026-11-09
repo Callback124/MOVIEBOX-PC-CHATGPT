@@ -340,6 +340,9 @@ public class PlayerActivity extends Activity {
             player.prepare();
             if (pos > 0) player.seekTo(pos);
             player.setPlayWhenReady(true);
+        } else if (storyTvMode) {
+            titleView.setText(formatEpisodeTitle(basePlayerTitle) + "  •  Loading stream…");
+            fetchStoryTvStream(storyTvEpisode);
         } else if (movieBoxMode) {
             titleView.setText(formatEpisodeTitle(basePlayerTitle) + "  •  Loading resources…");
             fetchMovieBoxResources(movieBoxSubjectId, movieBoxDetailPath, movieBoxSeason, movieBoxEpisode, false);
