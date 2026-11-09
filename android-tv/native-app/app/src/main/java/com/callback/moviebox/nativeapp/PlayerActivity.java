@@ -31,6 +31,10 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.Button;
+import android.util.Log;
+import android.content.ClipboardManager;
+import android.content.ClipData;
 
 import androidx.annotation.OptIn;
 import androidx.media3.common.C;
@@ -120,6 +124,9 @@ public class PlayerActivity extends Activity {
     private int storyTvEpisode = 1;
     private int storyTvEpisodeCount = 1;
     private boolean resourcesLoading = false;
+    private TextView diagnosticText;
+    private final StringBuilder diagnosticBuffer = new StringBuilder();
+    private static final String DIAG_PREFS = "story_tv_diagnostics";
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private boolean locked = false;
@@ -159,7 +166,11 @@ public class PlayerActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        installCrashRecorder();
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        diag("PlayerActivity onCreate; storyTv=" + getIntent().getBooleanExtra("storyTv", false)
+                + "; showIdPresent=" + (getIntent().getStringExtra("storyShowId") != null)
+                + "; episode=" + getIntent().getIntExtra("storyEpisode", 1));
         buildUi();
         hideSystemUi();
         initPlayer();
@@ -168,18 +179,21 @@ public class PlayerActivity extends Activity {
     @Override
     protected void onStart() {
         super.onStart();
+        diag("Lifecycle: onStart");
         handler.post(ticker);
     }
 
     @Override
     protected void onStop() {
         super.onStop();
+        diag("Lifecycle: onStop; finishing=" + isFinishing());
         handler.removeCallbacks(ticker);
         if (player != null) player.pause();
     }
 
     @Override
     protected void onDestroy() {
+        diag("Lifecycle: onDestroy; finishing=" + isFinishing());
         super.onDestroy();
         handler.removeCallbacksAndMessages(null);
         if (player != null) {
@@ -257,6 +271,7 @@ public class PlayerActivity extends Activity {
         player.addListener(new Player.Listener() {
             @Override
             public void onPlayerError(PlaybackException error) {
+                diag("EXOPLAYER ERROR: code=" + error.errorCode + " (" + error.getErrorCodeName() + ")\n" + stackTrace(error));
                 Throwable cause = error;
                 while (cause.getCause() != null && cause.getCause() != cause) cause = cause.getCause();
                 if (cause instanceof androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException) {
@@ -278,6 +293,7 @@ public class PlayerActivity extends Activity {
 
             @Override
             public void onPlaybackStateChanged(int state) {
+                diag("Playback state changed: " + playbackStateName(state));
                 updatePlayIcon();
                 if (state == Player.STATE_ENDED) {
                     showControls();
@@ -526,6 +542,7 @@ public class PlayerActivity extends Activity {
         sp.setMargins(0, 0, dp(16), dp(16));
         sheetLayer.addView(sheet, sp);
 
+        if (getIntent().getBooleanExtra("storyTv", false)) addDiagnosticsPanel();
         setContentView(root);
     }
 
@@ -1454,7 +1471,92 @@ public class PlayerActivity extends Activity {
         fetchStoryTvStream(episodeNumber);
     }
 
+
+    private void installCrashRecorder() {
+        Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
+        Thread.setDefaultUncaughtExceptionHandler((thread, error) -> {
+            String report = "FATAL CRASH on " + thread.getName() + "\n" + stackTrace(error);
+            getSharedPreferences(DIAG_PREFS, MODE_PRIVATE).edit().putString("last_crash", report).apply();
+            if (previous != null) previous.uncaughtException(thread, error);
+        });
+    }
+
+    private void diag(String message) {
+        String line = new java.text.SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(new java.util.Date())
+                + "  " + message;
+        Log.e("StoryTVDebug", line);
+        synchronized (diagnosticBuffer) {
+            diagnosticBuffer.append(line).append("\n\n");
+            if (diagnosticBuffer.length() > 18000) diagnosticBuffer.delete(0, diagnosticBuffer.length() - 18000);
+        }
+        if (diagnosticText != null) runOnUiThread(() -> diagnosticText.setText(diagnosticBuffer.toString()));
+    }
+
+    private void addDiagnosticsPanel() {
+        String previousCrash = getSharedPreferences(DIAG_PREFS, MODE_PRIVATE).getString("last_crash", "");
+        if (previousCrash != null && !previousCrash.isEmpty()) {
+            diagnosticBuffer.append("PREVIOUS APP CRASH (saved):\n").append(previousCrash).append("\n\n");
+            getSharedPreferences(DIAG_PREFS, MODE_PRIVATE).edit().remove("last_crash").apply();
+        }
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(10), dp(8), dp(10), dp(8));
+        panel.setBackgroundColor(0xE6000000);
+        TextView heading = new TextView(this);
+        heading.setText("STORY TV DEBUG LOG  •  tap COPY to share");
+        heading.setTextColor(0xFFB7F0DF);
+        heading.setTextSize(12);
+        heading.setTypeface(Typeface.DEFAULT_BOLD);
+        panel.addView(heading, new LinearLayout.LayoutParams(MATCH, WRAP));
+        ScrollView scroll = new ScrollView(this);
+        diagnosticText = new TextView(this);
+        diagnosticText.setTextColor(Color.WHITE);
+        diagnosticText.setTextSize(10);
+        diagnosticText.setTextIsSelectable(true);
+        diagnosticText.setPadding(0, dp(6), 0, dp(6));
+        scroll.addView(diagnosticText);
+        panel.addView(scroll, new LinearLayout.LayoutParams(MATCH, dp(125)));
+        Button copy = new Button(this);
+        copy.setText("COPY ERROR LOG");
+        copy.setOnClickListener(v -> {
+            String report;
+            synchronized (diagnosticBuffer) { report = diagnosticBuffer.toString(); }
+            ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            clipboard.setPrimaryClip(ClipData.newPlainText("Story TV diagnostics", report));
+            Toast.makeText(this, "Diagnostic log copied", Toast.LENGTH_LONG).show();
+        });
+        panel.addView(copy, new LinearLayout.LayoutParams(MATCH, WRAP));
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(MATCH, WRAP, Gravity.BOTTOM);
+        lp.setMargins(dp(8), 0, dp(8), dp(8));
+        root.addView(panel, lp);
+        diagnosticText.setText(diagnosticBuffer.toString());
+    }
+
+    private static String stackTrace(Throwable error) {
+        if (error == null) return "(no exception details)";
+        java.io.StringWriter sw = new java.io.StringWriter();
+        error.printStackTrace(new java.io.PrintWriter(sw));
+        return sw.toString();
+    }
+
+    private static String playbackStateName(int state) {
+        if (state == Player.STATE_IDLE) return "IDLE";
+        if (state == Player.STATE_BUFFERING) return "BUFFERING";
+        if (state == Player.STATE_READY) return "READY";
+        if (state == Player.STATE_ENDED) return "ENDED";
+        return "UNKNOWN(" + state + ")";
+    }
+
+    private static String safe(String value) {
+        return value == null ? "(null)" : value;
+    }
+
+    private static String safeHost(String value) {
+        try { return new URL(value).getHost(); } catch (Exception ignored) { return "(invalid URL)"; }
+    }
+
     private void fetchStoryTvStream(int episodeNumber) {
+        diag("API request start: metadata episode=" + episodeNumber + "; showId=" + safe(storyTvShowId));
         titleView.setText(basePlayerTitle + " · Episode " + episodeNumber + "  •  Loading stream…");
         new Thread(() -> {
             HttpURLConnection connection=null;
@@ -1468,14 +1570,18 @@ public class PlayerActivity extends Activity {
                 connection.setRequestProperty("deviceId","a6229bad5c179d51");connection.setRequestProperty("platform","0");
                 connection.setRequestProperty("iamsinu","iamsinu");connection.setRequestProperty("network_type","WIFI");
                 connection.setRequestProperty("Accept","application/json");connection.setRequestProperty("User-Agent","ktor-client");
-                int status=connection.getResponseCode();InputStream input=status>=200&&status<300?connection.getInputStream():connection.getErrorStream();
+                int status=connection.getResponseCode();
+                diag("Story API HTTP status: " + status + "; endpoint cursor=" + cursor);
+                InputStream input=status>=200&&status<300?connection.getInputStream():connection.getErrorStream();
                 ByteArrayOutputStream output=new ByteArrayOutputStream();byte[] buffer=new byte[8192];int n;while((n=input.read(buffer))!=-1)output.write(buffer,0,n);
                 JSONObject response=new JSONObject(new String(output.toByteArray(),"UTF-8"));
                 if(status<200||status>=300)throw new Exception("Story TV HTTP "+status);
                 JSONArray content=response.optJSONObject("data")==null?new JSONArray():response.optJSONObject("data").optJSONArray("content");
                 JSONObject target=null;if(content!=null)for(int i=0;i<content.length();i++){JSONObject item=content.optJSONObject(i);if(item!=null&&item.optInt("index")==episodeNumber){target=item;break;}}
                 if(target==null)throw new Exception("Episode "+episodeNumber+" stream not found");
-                String stream=target.optString("epsUrl","");if(stream.isEmpty())throw new Exception("Empty stream URL");
+                String stream=target.optString("epsUrl","");
+                diag("Episode metadata found; epsUrlPresent=" + !stream.isEmpty() + "; contentCount=" + (content == null ? 0 : content.length()));
+                if(stream.isEmpty())throw new Exception("Empty stream URL");
                 final String streamUrl=stream;final String episodeName=target.optString("epsTitle","Episode "+episodeNumber);
                 runOnUiThread(() -> {
                     basePlayerTitle=getIntent().getStringExtra("title");if(basePlayerTitle==null)basePlayerTitle="Story TV";
@@ -1483,13 +1589,16 @@ public class PlayerActivity extends Activity {
                     MediaItem item=new MediaItem.Builder().setUri(Uri.parse(streamUrl)).setMimeType("application/x-mpegURL")
                             .setMediaMetadata(new MediaMetadata.Builder().setTitle(episodeName).build()).build();
                     if (player == null || isFinishing() || isDestroyed()) return;
+                    diag("Setting HLS media item for episode " + episodeNumber + "; URL host=" + safeHost(streamUrl));
                     player.setMediaItem(item);
                     player.prepare();
                     player.setPlayWhenReady(true);
                     updateEpisodeControls();
                     showControls();
                 });
-            } catch(Exception error) { final String message=error.getMessage();runOnUiThread(() -> {titleView.setText(basePlayerTitle+" · Episode "+episodeNumber);toast("Story TV stream failed: "+message);showControls();});}
+            } catch(Exception error) { final String message=error.getMessage();
+                diag("STORY API/FETCH ERROR: " + stackTrace(error));
+                runOnUiThread(() -> {titleView.setText(basePlayerTitle+" · Episode "+episodeNumber);toast("Story TV stream failed: "+message);showControls();});}
             finally {if(connection!=null)connection.disconnect();}
         }).start();
     }
