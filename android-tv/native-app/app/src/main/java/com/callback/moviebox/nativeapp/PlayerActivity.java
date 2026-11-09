@@ -120,6 +120,9 @@ public class PlayerActivity extends Activity {
     private int movieBoxEpisode = 0;
     private boolean movieBoxMode = false;
     private boolean storyTvMode = false;
+    private boolean freeReelsMode = false;
+    private int freeReelsEpisode = 1;
+    private JSONArray freeReelsEpisodes = new JSONArray();
     private String storyTvShowId = "";
     private int storyTvEpisode = 1;
     private int storyTvEpisodeCount = 1;
@@ -323,6 +326,9 @@ public class PlayerActivity extends Activity {
         try { episodeSequence = new JSONArray(getIntent().getStringExtra("episodeSequence") == null ? "[]" : getIntent().getStringExtra("episodeSequence")); } catch (Exception ignored) { episodeSequence = new JSONArray(); }
         movieBoxMode = getIntent().getBooleanExtra("movieBox", false);
         storyTvMode = getIntent().getBooleanExtra("storyTv", false);
+        freeReelsMode = getIntent().getBooleanExtra("freeReels", false);
+        freeReelsEpisode = getIntent().getIntExtra("episode", 1);
+        try { freeReelsEpisodes = new JSONArray(getIntent().getStringExtra("freeReelsEpisodes") == null ? "[]" : getIntent().getStringExtra("freeReelsEpisodes")); } catch (Exception ignored) { freeReelsEpisodes = new JSONArray(); }
         storyTvShowId = getIntent().getStringExtra("storyShowId");
         storyTvEpisode = getIntent().getIntExtra("storyEpisode", 1);
         storyTvEpisodeCount = getIntent().getIntExtra("storyEpisodeCount", storyTvEpisode);
@@ -1404,19 +1410,28 @@ public class PlayerActivity extends Activity {
         return -1;
     }
 
+    private int freeReelsEpisodeIndex() {
+        for (int i=0;i<freeReelsEpisodes.length();i++) {
+            JSONObject ep=freeReelsEpisodes.optJSONObject(i);
+            if(ep!=null && ep.optInt("index",i+1)==freeReelsEpisode) return i;
+        }
+        return -1;
+    }
     private boolean hasNextEpisode() {
         if (storyTvMode) return storyTvEpisode < storyTvEpisodeCount;
+        if (freeReelsMode) return freeReelsEpisodeIndex() >= 0 && freeReelsEpisodeIndex()+1 < freeReelsEpisodes.length();
         int i = currentEpisodeIndex();
         return episodeSequence.length() > 0 && (i < 0 || i + 1 < episodeSequence.length());
     }
     private boolean hasPreviousEpisode() {
         if (storyTvMode) return storyTvEpisode > 1;
+        if (freeReelsMode) return freeReelsEpisodeIndex() > 0;
         int i = currentEpisodeIndex();
         return i > 0;
     }
 
     private void updateEpisodeControls() {
-        boolean episodic = (movieBoxMode && episodeSequence.length() > 0) || (storyTvMode && storyTvEpisodeCount > 1);
+        boolean episodic = (movieBoxMode && episodeSequence.length() > 0) || (storyTvMode && storyTvEpisodeCount > 1) || (freeReelsMode && freeReelsEpisodes.length() > 1);
         if (previousEpisodeBtn != null) {
             previousEpisodeBtn.setVisibility(episodic ? View.VISIBLE : View.GONE);
             previousEpisodeBtn.setEnabled(episodic && hasPreviousEpisode());
@@ -1432,6 +1447,7 @@ public class PlayerActivity extends Activity {
     private String formatEpisodeTitle(String rawTitle) {
         String clean = rawTitle == null ? "" : rawTitle.trim();
         if (storyTvMode) return clean + " · Episode " + storyTvEpisode;
+        if (freeReelsMode) return clean + " · Episode " + freeReelsEpisode;
         if (!movieBoxMode || episodeSequence.length() == 0 || movieBoxEpisode <= 0) return clean;
         clean = clean.replaceAll("(?i)\\s*[·|—-]?\\s*S\\d{1,2}\\s*E\\d{1,3}\\s*$", "").trim();
         return clean + " · S" + String.format(Locale.US, "%02d", movieBoxSeason)
@@ -1446,6 +1462,11 @@ public class PlayerActivity extends Activity {
     }
 
     private void playAdjacentEpisode(int direction) {
+        if (freeReelsMode) {
+            int targetIndex=freeReelsEpisodeIndex()+direction;
+            if(targetIndex>=0&&targetIndex<freeReelsEpisodes.length()) playFreeReelsEpisodeAt(targetIndex);
+            return;
+        }
         if (storyTvMode) {
             int targetEpisode = storyTvEpisode + direction;
             if (targetEpisode >= 1 && targetEpisode <= storyTvEpisodeCount) playStoryTvEpisode(targetEpisode);
@@ -1461,6 +1482,24 @@ public class PlayerActivity extends Activity {
         movieBoxEpisode = next.optInt("ep", movieBoxEpisode);
         updateEpisodeSubtitle();
         fetchMovieBoxResources(movieBoxSubjectId, movieBoxDetailPath, movieBoxSeason, movieBoxEpisode, false);
+    }
+
+    private void playFreeReelsEpisodeAt(int index) {
+        if(!freeReelsMode||index<0||index>=freeReelsEpisodes.length())return;
+        JSONObject ep=freeReelsEpisodes.optJSONObject(index);if(ep==null)return;
+        String stream=ep.optString("external_audio_h264_m3u8","");
+        if(stream.isEmpty())stream=ep.optString("video_url","");
+        if(stream.isEmpty())stream=ep.optString("m3u8_url","");
+        if(stream.isEmpty())stream=ep.optString("external_audio_h265_m3u8","");
+        if(stream.isEmpty()){toast("FreeReels Episode "+ep.optInt("index",index+1)+" has no stream URL");return;}
+        freeReelsEpisode=ep.optInt("index",index+1);
+        titleView.setText(formatEpisodeTitle(basePlayerTitle)+"  •  Loading stream…");
+        if(player!=null){player.stop();player.clearMediaItems();}
+        updateEpisodeControls();
+        activeSourceUrl=stream;
+        player.setMediaItem(MediaItem.fromUri(stream));
+        player.prepare();
+        player.setPlayWhenReady(true);
     }
 
     private void playStoryTvEpisode(int episodeNumber) {
