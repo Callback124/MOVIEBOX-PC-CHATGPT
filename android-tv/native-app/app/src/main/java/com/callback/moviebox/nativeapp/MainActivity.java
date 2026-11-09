@@ -347,9 +347,9 @@ public class MainActivity extends Activity {
 
  private JSONArray freeReelsKeywords(JSONObject response){JSONObject d=response==null?null:response.optJSONObject("data");JSONArray a=d==null?null:d.optJSONArray("keywords");return a==null?new JSONArray():a;}
  private JSONArray freeReelsItems(JSONObject response){
-  JSONArray out=new JSONArray();JSONObject d=response==null?null:response.optJSONObject("data");JSONArray source=d==null?null:d.optJSONArray("items");if(source==null)return out;
+  JSONArray out=new JSONArray();JSONObject d=response==null?null:response.optJSONObject("data");JSONArray source=d==null?null:d.optJSONArray("items");if(source==null&&d!=null)source=d.optJSONArray("list");if(source==null&&d!=null)source=d.optJSONArray("dramas");if(source==null)return out;
   for(int i=0;i<source.length();i++){JSONObject entry=source.optJSONObject(i);if(entry==null)continue;
-   if(entry.has("series_id")||entry.has("series_key")||entry.has("key")){out.put(entry);continue;}
+   if(entry.has("series_id")||entry.has("series_key")||entry.has("key")||entry.has("id")){out.put(entry);continue;}
    JSONArray nested=entry.optJSONArray("items");if(nested!=null)for(int k=0;k<nested.length();k++){JSONObject item=nested.optJSONObject(k);if(item!=null)out.put(item);}
   }return out;
  }
@@ -370,7 +370,7 @@ public class MainActivity extends Activity {
  }
  private void appendFreeReelsCards(LinearLayout grid,JSONArray items,boolean searchResults){
   int cols=6;int width=Math.max(dp(42),(getResources().getDisplayMetrics().widthPixels-dp(60)-dp(6)*5)/6);
-  for(int i=0;i<items.length();i++){JSONObject item=items.optJSONObject(i);if(item==null)continue;String key=item.optString("series_id",item.optString("series_key",item.optString("key","")));if(key.isEmpty())continue;if(searchResults&&!freeSearchSeen.add(key))continue;
+  for(int i=0;i<items.length();i++){JSONObject item=items.optJSONObject(i);if(item==null)continue;String key=item.optString("series_id",item.optString("series_key",item.optString("key",item.optString("id",""))));if(key.isEmpty())continue;if(searchResults&&!freeSearchSeen.add(key))continue;
    if(searchResults){if(freeSearchRow==null||freeSearchRowCount>=cols){freeSearchRow=new LinearLayout(this);freeSearchRow.setOrientation(0);freeSearchRow.setGravity(Gravity.TOP);freeSearchRow.setPadding(dp(24),dp(8),dp(24),dp(8));grid.addView(freeSearchRow,new LinearLayout.LayoutParams(-1,-2));freeSearchRowCount=0;}}
    else if(freeHomeRow==null||freeHomeRowCount>=cols){freeHomeRow=new LinearLayout(this);freeHomeRow.setOrientation(0);freeHomeRow.setGravity(Gravity.TOP);freeHomeRow.setPadding(dp(24),dp(8),dp(24),dp(8));grid.addView(freeHomeRow,new LinearLayout.LayoutParams(-1,-2));freeHomeRowCount=0;}
    LinearLayout row=searchResults?freeSearchRow:freeHomeRow;LinearLayout card=new LinearLayout(this);card.setOrientation(1);card.setFocusable(true);card.setClickable(true);card.setPadding(dp(3),dp(3),dp(3),dp(8));card.setBackground(bg(PANEL,0));
@@ -395,32 +395,48 @@ public class MainActivity extends Activity {
   }catch(Exception e){runOnUiThread(()->{content.removeAllViews();TextView error=txt("FreeReels details unavailable: "+e.getMessage(),14,WHITE,false);error.setPadding(dp(48),dp(25),dp(48),dp(15));content.addView(error);TextView retry=button("RETRY",false,()->openFreeReelsDetail(item));content.addView(retry,new LinearLayout.LayoutParams(dp(150),dp(48)));});}}).start();
  }
  private void renderFreeReelsDetail(JSONObject info,JSONArray episodes){
-  content.removeAllViews();String name=info.optString("name","Untitled Drama"),image=info.optString("cover","");if(image.startsWith("//"))image="https:"+image;
-  FrameLayout hero=new FrameLayout(this);hero.setBackgroundColor(PANEL);content.addView(hero,new LinearLayout.LayoutParams(-1,dp(420)));
-  ImageView art=new ImageView(this);art.setScaleType(ImageView.ScaleType.CENTER_CROP);hero.addView(art,new FrameLayout.LayoutParams(-1,-1));if(!image.isEmpty())Glide.with(this).load(image).centerCrop().into(art);
-  LinearLayout shade=new LinearLayout(this);shade.setOrientation(1);shade.setGravity(Gravity.BOTTOM);shade.setPadding(dp(48),dp(28),dp(48),dp(28));shade.setBackgroundColor(0x99000000);hero.addView(shade,new FrameLayout.LayoutParams(-1,-1));
-  TextView title=txt(name,30,WHITE,true);shade.addView(title);
-  JSONArray tags=info.optJSONArray("series_tag");StringBuilder tagText=new StringBuilder();if(tags!=null)for(int i=0;i<tags.length();i++){if(tagText.length()>0)tagText.append("  •  ");tagText.append(tags.optString(i));}
-  String count=info.optString("episode_count",String.valueOf(episodes.length()));String views=info.optString("view_count","");
-  TextView meta=txt(tagText+(tagText.length()>0?"  •  ":"")+count+" Episodes"+(views.isEmpty()?"":"  •  "+views+" views"),14,WHITE,true);LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(-1,-2);mp.topMargin=dp(12);shade.addView(meta,mp);
-  TextView heading=txt("About this drama",21,WHITE,true);heading.setPadding(dp(48),dp(24),dp(48),dp(8));content.addView(heading);
-  TextView desc=txt(info.optString("desc",""),15,MUTED,false);desc.setPadding(dp(48),0,dp(48),dp(22));content.addView(desc);
-  TextView episodesHeading=txt("Episodes  ("+episodes.length()+")",21,WHITE,true);episodesHeading.setPadding(dp(48),dp(12),dp(48),dp(14));content.addView(episodesHeading);
-  LinearLayout list=new LinearLayout(this);list.setOrientation(1);list.setPadding(dp(48),0,dp(48),dp(35));content.addView(list,new LinearLayout.LayoutParams(-1,-2));
-  for(int i=0;i<episodes.length();i++){JSONObject ep=episodes.optJSONObject(i);if(ep==null)continue;final JSONObject selected=ep;int number=ep.optInt("index",i+1);
-   LinearLayout row=new LinearLayout(this);row.setOrientation(0);row.setGravity(Gravity.CENTER_VERTICAL);row.setFocusable(true);row.setClickable(true);row.setPadding(dp(14),dp(10),dp(18),dp(10));row.setBackground(bg(PANEL,0));
-   TextView num=txt(String.format(Locale.US,"%02d",number),18,WHITE,true);row.addView(num,new LinearLayout.LayoutParams(dp(55),-2));
-   LinearLayout labels=new LinearLayout(this);labels.setOrientation(1);labels.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1));
-   TextView epTitle=txt("Episode "+number,15,WHITE,true);labels.addView(epTitle);TextView duration=txt(String.format(Locale.US,"%d:%02d",Math.max(0,ep.optInt("duration",0))/60,Math.max(0,ep.optInt("duration",0))%60),12,MUTED,false);labels.addView(duration);row.addView(labels);
-   TextView play=txt("▶",22,WHITE,true);row.addView(play);
-   row.setOnFocusChangeListener((v,focus)->row.setBackground(bg(focus?0xff302024:PANEL,focus?RED:0)));
-   row.setOnClickListener(v->playFreeReelsEpisode(info,selected,episodes));LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(-1,-2);rp.bottomMargin=dp(7);list.addView(row,rp);
-  }
+  content.removeAllViews();String name=info.optString("name","Untitled Drama"),image=info.optString("cover","");
+  JSONObject metadata=new JSONObject();try{JSONArray tags=info.optJSONArray("series_tag");if(tags!=null)metadata.put("genre",tags);}catch(Exception ignored){}int episodeCount=info.optInt("episode_count",episodes.length());
+  String genre=storyValue(metadata.opt("genre"));
+  FrameLayout hero=new FrameLayout(this);hero.setBackgroundColor(0xff171717);content.addView(hero,new LinearLayout.LayoutParams(-1,dp(430)));
+  ImageView backdrop=new ImageView(this);backdrop.setScaleType(ImageView.ScaleType.CENTER_CROP);hero.addView(backdrop,new FrameLayout.LayoutParams(-1,-1));
+  if(!image.isEmpty())Glide.with(this).load(image).override(getResources().getDisplayMetrics().widthPixels,dp(430)).centerCrop().dontAnimate().priority(com.bumptech.glide.Priority.IMMEDIATE).into(backdrop);
+  View shade=new View(this);shade.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,new int[]{0x22000000,0x66101010,0xff141414}));hero.addView(shade,new FrameLayout.LayoutParams(-1,-1));
+  LinearLayout body=new LinearLayout(this);body.setGravity(Gravity.BOTTOM);body.setPadding(dp(48),dp(30),dp(48),dp(26));body.setOrientation(0);hero.addView(body,new FrameLayout.LayoutParams(-1,-1));
+  ImageView posterView=new ImageView(this);posterView.setScaleType(ImageView.ScaleType.CENTER_CROP);posterView.setBackground(bg(PANEL,0xff333333));
+  LinearLayout.LayoutParams posterLp=new LinearLayout.LayoutParams(dp(190),dp(285));posterLp.rightMargin=dp(30);body.addView(posterView,posterLp);
+  if(!image.isEmpty())Glide.with(this).load(image).override(dp(380),dp(570)).centerCrop().diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.ALL).into(posterView);
+  LinearLayout info=new LinearLayout(this);info.setOrientation(1);info.setGravity(Gravity.BOTTOM);body.addView(info,new LinearLayout.LayoutParams(0,-2,1));
+  TextView titleView=detailText(name,32,WHITE,true);titleView.setMaxLines(2);info.addView(titleView);
+  LinearLayout meta=new LinearLayout(this);meta.setGravity(Gravity.CENTER_VERTICAL);meta.setPadding(0,dp(10),0,dp(8));info.addView(meta);
+  if(episodeCount>0)meta.addView(detailText(episodeCount+" Episodes",16,0xffdddddd,true));
+  if(!genre.isEmpty())meta.addView(detailText("   "+genre,15,0xffdddddd,false));
+  String synopsis=info.optString("desc","");
+  if(!synopsis.isEmpty()){TextView desc=detailText(synopsis,15,0xffeeeeee,false);desc.setMaxLines(4);desc.setEllipsize(TextUtils.TruncateAt.END);LinearLayout.LayoutParams descLp=new LinearLayout.LayoutParams(-1,-2);descLp.topMargin=dp(10);info.addView(desc,descLp);}
+  LinearLayout actions=new LinearLayout(this);actions.setGravity(Gravity.CENTER_VERTICAL);LinearLayout.LayoutParams actionLp=new LinearLayout.LayoutParams(-1,dp(54));actionLp.topMargin=dp(16);info.addView(actions,actionLp);
+  final JSONArray finalEpisodes=episodes;
+  final int firstEpisode=finalEpisodes.length()>0?Math.max(1,finalEpisodes.optJSONObject(0)==null?1:finalEpisodes.optJSONObject(0).optInt("index",1)):1;
+  detailAction(actions,"▶  WATCH NOW",true,()->launchFreeReelsEpisode(info,finalEpisodes,firstEpisode));
+  detailAction(actions,"＋  MY LIST",false,()->toggleSaved("mylist",info));
+  if(!synopsis.isEmpty()){detailHeading("Synopsis");TextView desc=detailText(synopsis,16,0xffcccccc,false);desc.setPadding(dp(48),0,dp(55),dp(8));content.addView(desc);}
+  if(metadata!=null){Iterator<String> mk=metadata.keys();while(mk.hasNext()){String key=mk.next();if(key.equalsIgnoreCase("genre"))continue;String value=storyValue(metadata.opt(key));if(value.isEmpty())continue;detailHeading(key.replace('_',' ').toUpperCase());TextView val=detailText(value,15,0xffcccccc,false);val.setPadding(dp(48),0,dp(48),dp(10));content.addView(val);}}
+  if(episodeRows.length()>0){
+   detailHeading("Episodes");
+   TextView episodeSummary=detailText(episodeCount+" episodes  ·  "+name,13,MUTED,false);episodeSummary.setPadding(dp(48),0,dp(48),dp(10));content.addView(episodeSummary);
+   HorizontalScrollView rangeScroll=new HorizontalScrollView(this);rangeScroll.setHorizontalScrollBarEnabled(false);LinearLayout rangeTabs=new LinearLayout(this);rangeTabs.setGravity(Gravity.CENTER_VERTICAL);rangeScroll.addView(rangeTabs,new HorizontalScrollView.LayoutParams(-2,dp(48)));LinearLayout.LayoutParams rangeLp=new LinearLayout.LayoutParams(-1,dp(52));rangeLp.leftMargin=dp(48);rangeLp.rightMargin=dp(48);content.addView(rangeScroll,rangeLp);
+   LinearLayout episodeGrid=new LinearLayout(this);episodeGrid.setOrientation(1);episodeGrid.setPadding(dp(48),0,dp(48),dp(25));content.addView(episodeGrid);
+   int rangeTotal=(finalEpisodes.length()+99)/100;int[] selectedRange={0};Runnable[] drawEpisodes={null};drawEpisodes[0]=()->{episodeGrid.removeAllViews();int from=selectedRange[0]*100,to=Math.min(finalEpisodes.length(),from+100);for(int base=from;base<to;base+=5){LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(0,0,0,dp(8));episodeGrid.addView(row,new LinearLayout.LayoutParams(-1,dp(76)));for(int i=base;i<Math.min(to,base+5);i++){JSONObject ep=finalEpisodes.optJSONObject(i);if(ep==null)continue;int index=ep.optInt("index",i+1);String epTitle=ep.optString("epTitle","Episode "+index);boolean locked=ep.optBoolean("lock",false),watched=ep.optBoolean("isWtch",false);LinearLayout tile=new LinearLayout(this);tile.setOrientation(1);tile.setGravity(Gravity.CENTER);tile.setFocusable(true);tile.setBackground(bg(0xff202020,0xff383838));TextView number=detailText("EPISODE "+index,13,WHITE,true);number.setGravity(Gravity.CENTER);tile.addView(number);tile.setOnFocusChangeListener((v,focus)->tile.setBackground(bg(focus?0xff3b171a:0xff202020,focus?RED:0xff383838)));tile.setOnClickListener(v->launchFreeReelsEpisode(info,finalEpisodes,index));LinearLayout.LayoutParams tileLp=new LinearLayout.LayoutParams(0,dp(76),1);tileLp.rightMargin=dp(8);row.addView(tile,tileLp);}}};
+   if(rangeTotal>1){for(int r=0;r<rangeTotal;r++){final int range=r;TextView tab=detailText((r*100+1)+"-"+Math.min(finalEpisodes.length(),(r+1)*100),13,WHITE,true);tab.setGravity(Gravity.CENTER);tab.setPadding(dp(18),0,dp(18),0);tab.setFocusable(true);tab.setBackground(bg(r==0?0xff3b171a:PANEL,r==0?RED:0));tab.setOnClickListener(v->{selectedRange[0]=range;for(int k=0;k<rangeTabs.getChildCount();k++)rangeTabs.getChildAt(k).setBackground(bg(k==range?0xff3b171a:PANEL,k==range?RED:0));drawEpisodes[0].run();});LinearLayout.LayoutParams tlp=new LinearLayout.LayoutParams(-2,dp(40));tlp.rightMargin=dp(8);rangeTabs.addView(tab,tlp);}}
+   drawEpisodes[0].run();
+  }else{detailHeading("Episodes");TextView empty=detailText("No episode entries were returned by FreeReels for this title.",14,MUTED,false);empty.setPadding(dp(48),0,dp(48),dp(25));content.addView(empty);}
+  // Back navigation is handled by the Android back key.
  }
- private void playFreeReelsEpisode(JSONObject info,JSONObject episode,JSONArray episodes){
-  String stream=episode.optString("external_audio_h264_m3u8","");if(stream.isEmpty())stream=episode.optString("video_url","");if(stream.isEmpty())stream=episode.optString("m3u8_url","");if(stream.isEmpty())stream=episode.optString("external_audio_h265_m3u8","");
-  if(stream.isEmpty()){Toast.makeText(this,"Episode stream URL is missing",Toast.LENGTH_LONG).show();return;}
-  try{Intent intent=new Intent(this,PlayerActivity.class);intent.putExtra("freeReels",true);intent.putExtra("url",stream);intent.putExtra("title",info.optString("name","FreeReels"));intent.putExtra("episode",episode.optInt("index",1));intent.putExtra("episodeCount",episodes.length());intent.putExtra("freeReelsHeaders",true);startActivity(intent);}catch(Exception e){Toast.makeText(this,"Cannot open player: "+e.getMessage(),Toast.LENGTH_LONG).show();}
+ private void launchFreeReelsEpisode(JSONObject info,JSONArray episodes,int episodeIndex){
+  JSONObject chosen=null;for(int i=0;i<episodes.length();i++){JSONObject ep=episodes.optJSONObject(i);if(ep!=null&&ep.optInt("index",i+1)==episodeIndex){chosen=ep;break;}}
+  if(chosen==null){new AlertDialog.Builder(this).setTitle("Episode unavailable").setMessage("FreeReels did not return this episode.").setPositiveButton("OK",null).show();return;}
+  String stream=chosen.optString("external_audio_h264_m3u8","");if(stream.isEmpty())stream=chosen.optString("video_url","");if(stream.isEmpty())stream=chosen.optString("m3u8_url","");if(stream.isEmpty())stream=chosen.optString("external_audio_h265_m3u8","");
+  if(stream.isEmpty()){new AlertDialog.Builder(this).setTitle("Stream unavailable").setMessage("No playable URL was returned for Episode "+episodeIndex).setPositiveButton("OK",null).show();return;}
+  Intent intent=new Intent(this,PlayerActivity.class);intent.putExtra("freeReels",true);intent.putExtra("url",stream);intent.putExtra("title",info.optString("name","FreeReels"));intent.putExtra("episode",episodeIndex);intent.putExtra("episodeCount",episodes.length());intent.putExtra("freeReelsEpisodes",episodes.toString());startActivity(intent);
  }
  private void freeReelsSearch(String query,int page){
   if(query==null||query.trim().isEmpty())return;String keyword=query.trim();
