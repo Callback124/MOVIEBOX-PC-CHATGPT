@@ -123,6 +123,8 @@ public class PlayerActivity extends Activity {
     private boolean movieBoxMode = false;
     private boolean storyTvMode = false;
     private boolean freeReelsMode = false;
+    private boolean lookrMode = false;
+    private int lookrEpisodeCount = 1;
     private int freeReelsEpisode = 1;
     private String freeReelsSeriesId = "";
     private int freeReelsPreferredQualityHeight = 0;
@@ -253,6 +255,13 @@ public class PlayerActivity extends Activity {
             requestHeaders.put("Origin", "https://storytv.asia");
             requestHeaders.put("Referer", "https://storytv.asia/");
         }
+        if (getIntent().getBooleanExtra("lookr", false)) {
+            requestHeaders.put("User-Agent", "okhttp/4.12.0");
+            requestHeaders.put("Origin", "https://fzmovienow.top");
+            requestHeaders.put("Referer", "https://fzmovienow.top/");
+            requestHeaders.put("x-source", "lookr");
+            requestHeaders.put("Accept", "*/*");
+        }
         if (getIntent().getBooleanExtra("freeReels", false)) {
             requestHeaders.put("User-Agent", "okhttp/4.12.0");
             requestHeaders.put("Origin", "https://free-reels.com");
@@ -340,6 +349,8 @@ public class PlayerActivity extends Activity {
         movieBoxMode = getIntent().getBooleanExtra("movieBox", false);
         storyTvMode = getIntent().getBooleanExtra("storyTv", false);
         freeReelsMode = getIntent().getBooleanExtra("freeReels", false);
+        lookrMode = getIntent().getBooleanExtra("lookr", false);
+        lookrEpisodeCount = getIntent().getIntExtra("lookrEpisodeCount", 1);
         freeReelsEpisode = getIntent().getIntExtra("episode", 1);
         freeReelsSeriesId = getIntent().getStringExtra("freeReelsSeriesId");
         try { freeReelsEpisodes = new JSONArray(getIntent().getStringExtra("freeReelsEpisodes") == null ? "[]" : getIntent().getStringExtra("freeReelsEpisodes")); } catch (Exception ignored) { freeReelsEpisodes = new JSONArray(); }
@@ -391,6 +402,9 @@ public class PlayerActivity extends Activity {
         } else if (storyTvMode) {
             titleView.setText(formatEpisodeTitle(basePlayerTitle) + "  •  Loading stream…");
             fetchStoryTvStream(storyTvEpisode);
+        } else if (lookrMode) {
+            titleView.setText(formatEpisodeTitle(basePlayerTitle) + "  •  Loading stream…");
+            fetchLookrStream(movieBoxSubjectId, movieBoxSeason, movieBoxEpisode);
         } else if (movieBoxMode) {
             titleView.setText(formatEpisodeTitle(basePlayerTitle) + "  •  Loading resources…");
             fetchMovieBoxResources(movieBoxSubjectId, movieBoxDetailPath, movieBoxSeason, movieBoxEpisode, false);
@@ -1486,19 +1500,21 @@ public class PlayerActivity extends Activity {
     }
     private boolean hasNextEpisode() {
         if (storyTvMode) return storyTvEpisode < storyTvEpisodeCount;
+        if (lookrMode) return movieBoxEpisode < lookrEpisodeCount;
         if (freeReelsMode) return freeReelsEpisodeIndex() >= 0 && freeReelsEpisodeIndex()+1 < freeReelsEpisodes.length();
         int i = currentEpisodeIndex();
         return episodeSequence.length() > 0 && (i < 0 || i + 1 < episodeSequence.length());
     }
     private boolean hasPreviousEpisode() {
         if (storyTvMode) return storyTvEpisode > 1;
+        if (lookrMode) return movieBoxEpisode > 1;
         if (freeReelsMode) return freeReelsEpisodeIndex() > 0;
         int i = currentEpisodeIndex();
         return i > 0;
     }
 
     private void updateEpisodeControls() {
-        boolean episodic = (movieBoxMode && episodeSequence.length() > 0) || (storyTvMode && storyTvEpisodeCount > 1) || (freeReelsMode && freeReelsEpisodes.length() > 1);
+        boolean episodic = (movieBoxMode && episodeSequence.length() > 0) || (storyTvMode && storyTvEpisodeCount > 1) || (freeReelsMode && freeReelsEpisodes.length() > 1) || (lookrMode && lookrEpisodeCount > 1);
         if (previousEpisodeBtn != null) {
             previousEpisodeBtn.setVisibility(episodic ? View.VISIBLE : View.GONE);
             previousEpisodeBtn.setEnabled(episodic && hasPreviousEpisode());
@@ -1514,6 +1530,7 @@ public class PlayerActivity extends Activity {
     private String formatEpisodeTitle(String rawTitle) {
         String clean = rawTitle == null ? "" : rawTitle.trim();
         if (storyTvMode) return clean + " · Episode " + storyTvEpisode;
+        if (lookrMode && movieBoxEpisode > 0) return clean + " · S" + String.format(Locale.US, "%02d", movieBoxSeason) + " E" + String.format(Locale.US, "%02d", movieBoxEpisode);
         if (freeReelsMode) return clean + " · Episode " + freeReelsEpisode;
         if (!movieBoxMode || episodeSequence.length() == 0 || movieBoxEpisode <= 0) return clean;
         clean = clean.replaceAll("(?i)\\s*[·|—-]?\\s*S\\d{1,2}\\s*E\\d{1,3}\\s*$", "").trim();
@@ -1532,6 +1549,11 @@ public class PlayerActivity extends Activity {
         if (freeReelsMode) {
             int targetIndex=freeReelsEpisodeIndex()+direction;
             if(targetIndex>=0&&targetIndex<freeReelsEpisodes.length()) playFreeReelsEpisodeAt(targetIndex);
+            return;
+        }
+        if (lookrMode) {
+            int targetEpisode = movieBoxEpisode + direction;
+            if (targetEpisode >= 1 && targetEpisode <= lookrEpisodeCount) { movieBoxEpisode = targetEpisode; updateEpisodeSubtitle(); fetchLookrStream(movieBoxSubjectId, movieBoxSeason, movieBoxEpisode); }
             return;
         }
         if (storyTvMode) {
@@ -1723,6 +1745,70 @@ public class PlayerActivity extends Activity {
 
     private static String safeHost(String value) {
         try { return new URL(value).getHost(); } catch (Exception ignored) { return "(invalid URL)"; }
+    }
+
+
+    private void fetchLookrStream(String subjectId, int season, int episode) {
+        if (!lookrMode || resourcesLoading) return;
+        resourcesLoading = true;
+        titleView.setText(formatEpisodeTitle(basePlayerTitle) + "  •  Loading stream…");
+        new Thread(() -> {
+            Exception failure = null;
+            try {
+                JSONObject response = new LookrRepository().play(subjectId, season, episode);
+                JSONObject data = response.optJSONObject("data");
+                JSONArray streams = data == null ? null : data.optJSONArray("streams");
+                if (streams == null || streams.length() == 0) throw new Exception("Lookr returned no playable streams");
+                List<JSONObject> ordered = new ArrayList<>();
+                for (int i = 0; i < streams.length(); i++) {
+                    JSONObject raw = streams.optJSONObject(i);
+                    if (raw == null) continue;
+                    String url = raw.optString("url", "");
+                    if (url.isEmpty()) continue;
+                    JSONObject source = new JSONObject();
+                    source.put("url", url);
+                    source.put("format", raw.optString("format", "MP4"));
+                    String resolution = raw.optString("resolutions", "");
+                    source.put("quality", resolution.isEmpty() ? raw.optString("format", "Stream") : resolution + "p");
+                    source.put("resolutions", resolution);
+                    ordered.add(source);
+                }
+                Collections.sort(ordered, (a, b) -> Integer.compare(
+                        parseLookrResolution(b.optString("resolutions", "")),
+                        parseLookrResolution(a.optString("resolutions", ""))));
+                if (ordered.isEmpty()) throw new Exception("Lookr stream list did not contain a URL");
+                JSONArray available = new JSONArray();
+                for (JSONObject source : ordered) available.put(source);
+                JSONObject selected = available.getJSONObject(0);
+                final JSONArray choices = available;
+                final JSONObject first = selected;
+                runOnUiThread(() -> {
+                    resourcesLoading = false;
+                    if (player == null || isFinishing() || isDestroyed()) return;
+                    sourceVariants = choices;
+                    activeSourceUrl = first.optString("url", "");
+                    titleView.setText(formatEpisodeTitle(basePlayerTitle));
+                    playSource(first, 0L);
+                    if (sheetOpen) renderSheet(false);
+                    updateEpisodeControls();
+                });
+                return;
+            } catch (Exception e) {
+                failure = e;
+            }
+            final String message = failure == null ? "Unknown Lookr playback error" : failure.getMessage();
+            runOnUiThread(() -> {
+                resourcesLoading = false;
+                titleView.setText(formatEpisodeTitle(basePlayerTitle));
+                toast("Lookr playback failed: " + message);
+                showControls();
+            });
+        }).start();
+    }
+
+    private int parseLookrResolution(String value) {
+        try { return Integer.parseInt(value.replaceAll("[^0-9]", "")); }
+        catch (Exception ignored) { return 0; }
     }
 
     private void fetchStoryTvStream(int episodeNumber) {
