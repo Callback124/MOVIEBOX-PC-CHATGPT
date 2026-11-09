@@ -685,7 +685,8 @@ public class MainActivity extends Activity {
  }
  private void launchLookrPlayer(String subjectId,String name,int season,int episode,int episodeCount){Intent i=new Intent(this,PlayerActivity.class);i.putExtra("lookr",true);i.putExtra("subjectId",subjectId);i.putExtra("season",season);i.putExtra("episode",episode);i.putExtra("lookrEpisodeCount",episodeCount);i.putExtra("title",name);startActivity(i);}
  private void restoreLookrPagination(){if(getSelectedServer()!=2)return;pageScroll.setOnScrollChangeListener((View v,int sx,int sy,int osx,int osy)->{View child=pageScroll.getChildAt(0);if(child!=null&&lookrHasMore&&!lookrLoading&&child.getBottom()-sy-pageScroll.getHeight()<dp(520))loadLookrPage(true);});}
-\n private void showComingSoonServer(){
+
+ private void showComingSoonServer(){
   top.setVisibility(View.VISIBLE);if(slideTask!=null)handler.removeCallbacks(slideTask);content.removeAllViews();
   int selected=getSelectedServer();if(selected<0||selected>=SERVER_NAMES.length)selected=0;
   LinearLayout panel=new LinearLayout(this);panel.setOrientation(1);panel.setGravity(Gravity.CENTER);panel.setPadding(dp(30),dp(34),dp(30),dp(34));content.addView(panel,new LinearLayout.LayoutParams(-1,Math.max(dp(420),getResources().getDisplayMetrics().heightPixels-dp(90))));
