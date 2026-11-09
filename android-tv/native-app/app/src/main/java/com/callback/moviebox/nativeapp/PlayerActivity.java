@@ -279,7 +279,13 @@ public class PlayerActivity extends Activity {
             @Override
             public void onPlaybackStateChanged(int state) {
                 updatePlayIcon();
-                if (state == Player.STATE_ENDED) { showControls(); if (hasNextEpisode()) playAdjacentEpisode(1); }
+                if (state == Player.STATE_ENDED) {
+                    showControls();
+                    if (hasNextEpisode()) {
+                        if (storyTvMode) playStoryTvEpisode(storyTvEpisode + 1);
+                        else playAdjacentEpisode(1);
+                    }
+                }
             }
 
             @Override
@@ -1377,10 +1383,12 @@ public class PlayerActivity extends Activity {
     }
 
     private boolean hasNextEpisode() {
+        if (storyTvMode) return storyTvEpisode < storyTvEpisodeCount;
         int i = currentEpisodeIndex();
         return episodeSequence.length() > 0 && (i < 0 || i + 1 < episodeSequence.length());
     }
     private boolean hasPreviousEpisode() {
+        if (storyTvMode) return storyTvEpisode > 1;
         int i = currentEpisodeIndex();
         return i > 0;
     }
@@ -1416,6 +1424,11 @@ public class PlayerActivity extends Activity {
     }
 
     private void playAdjacentEpisode(int direction) {
+        if (storyTvMode) {
+            int targetEpisode = storyTvEpisode + direction;
+            if (targetEpisode >= 1 && targetEpisode <= storyTvEpisodeCount) playStoryTvEpisode(targetEpisode);
+            return;
+        }
         int index = currentEpisodeIndex();
         if (index < 0 && direction > 0) index = -1;
         int target = index + direction;
@@ -1426,6 +1439,19 @@ public class PlayerActivity extends Activity {
         movieBoxEpisode = next.optInt("ep", movieBoxEpisode);
         updateEpisodeSubtitle();
         fetchMovieBoxResources(movieBoxSubjectId, movieBoxDetailPath, movieBoxSeason, movieBoxEpisode, false);
+    }
+
+    private void playStoryTvEpisode(int episodeNumber) {
+        if (!storyTvMode || episodeNumber < 1 || episodeNumber > storyTvEpisodeCount) return;
+        storyTvEpisode = episodeNumber;
+        updateEpisodeSubtitle();
+        titleView.setText(formatEpisodeTitle(basePlayerTitle) + "  •  Loading stream…");
+        if (player != null) {
+            player.stop();
+            player.clearMediaItems();
+        }
+        updateEpisodeControls();
+        fetchStoryTvStream(episodeNumber);
     }
 
     private void fetchStoryTvStream(int episodeNumber) {
@@ -1456,7 +1482,12 @@ public class PlayerActivity extends Activity {
                     titleView.setText(basePlayerTitle+" · Episode "+episodeNumber);
                     MediaItem item=new MediaItem.Builder().setUri(Uri.parse(streamUrl)).setMimeType("application/x-mpegURL")
                             .setMediaMetadata(new MediaMetadata.Builder().setTitle(episodeName).build()).build();
-                    player.setMediaItem(item);player.prepare();player.setPlayWhenReady(true);updateEpisodeControls();showControls();
+                    if (player == null || isFinishing() || isDestroyed()) return;
+                    player.setMediaItem(item);
+                    player.prepare();
+                    player.setPlayWhenReady(true);
+                    updateEpisodeControls();
+                    showControls();
                 });
             } catch(Exception error) { final String message=error.getMessage();runOnUiThread(() -> {titleView.setText(basePlayerTitle+" · Episode "+episodeNumber);toast("Story TV stream failed: "+message);showControls();});}
             finally {if(connection!=null)connection.disconnect();}
