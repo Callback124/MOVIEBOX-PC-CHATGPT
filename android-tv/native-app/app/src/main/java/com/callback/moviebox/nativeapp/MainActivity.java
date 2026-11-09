@@ -103,7 +103,7 @@ public class MainActivity extends Activity {
    String image=info.optString("imageUrl",info.optString("cover",info.optString("coverUrl",source.optString("imageUrl",source.optString("cover",source.optString("coverUrl",""))))));
    int episodes=info.optInt("numOfEpisodes",info.optInt("episodeCount",source.optInt("numOfEpisodes",source.optInt("episodeCount",0))));
    JSONObject meta=info.optJSONObject("metadata");if(meta==null)meta=source.optJSONObject("metadata");
-   o.put("id",id);o.put("showId",id);o.put("title",name);o.put("imageUrl",image);o.put("numOfEpisodes",episodes);o.put("genre",meta==null?"Drama":meta.optString("genre","Drama"));o.put("subjectType",7);o.put("source","storytv");
+   o.put("id",id);o.put("showId",id);o.put("title",name);o.put("imageUrl",image);o.put("numOfEpisodes",episodes);o.put("genre",meta==null?"Drama":meta.optString("genre","Drama"));o.put("metadata",meta==null?new JSONObject():new JSONObject(meta.toString()));JSONObject watch=info.optJSONObject("watchInfo");if(watch==null)watch=source.optJSONObject("watchInfo");if(watch!=null)o.put("watchInfo",new JSONObject(watch.toString()));o.put("subjectType",7);o.put("source","storytv");
   }catch(Exception ignored){}
   return o;
  }
@@ -148,14 +148,14 @@ public class MainActivity extends Activity {
   }else{if(searchLoading||!searchHasMore)return;searchLoading=true;}
   final int requestedPage=page;
   new Thread(()->{try{
-   boolean storyMode=getSelectedServer()==3;JSONObject response=storyMode?storyApi.search(keyword,requestedPage,50):api.search(keyword,requestedPage);JSONArray items;if(storyMode){JSONArray raw=storySearchArray(response);items=new JSONArray();for(int i=0;i<raw.length();i++)items.put(storySearchItem(raw.optJSONObject(i)));}else items=searchArray(response);
+   boolean storyMode=getSelectedServer()==3;JSONObject response=storyMode?storyApi.search(keyword,Math.max(0,requestedPage-1),20):api.search(keyword,requestedPage);JSONArray items;if(storyMode){JSONArray raw=storySearchArray(response);items=new JSONArray();for(int i=0;i<raw.length();i++){JSONObject mapped=storySearchItem(raw.optJSONObject(i));if(!mapped.optString("id").isEmpty())items.put(mapped);}}else items=searchArray(response);
    JSONObject data=response.optJSONObject("data");JSONObject pager=data==null?null:data.optJSONObject("pager");
    boolean more;
    if(storyMode){
-    boolean hasMoreFlag=data!=null&&(data.has("hasMore")||data.has("has_more"));
-    more=pager!=null?pager.optBoolean("hasMore",requestedPage<pager.optInt("totalPages",requestedPage)):
-      hasMoreFlag?(data.optBoolean("hasMore",data.optBoolean("has_more",false))):
-      items.length()>=50;
+    int currentPage=data==null?Math.max(0,requestedPage-1):data.optInt("number",Math.max(0,requestedPage-1));
+    int totalPages=data==null?-1:data.optInt("totalPages",-1);
+    int responseSize=data==null?20:data.optInt("size",20);
+    more=totalPages>=0?currentPage+1<totalPages:items.length()>=responseSize;
    }else more=pager!=null?pager.optBoolean("hasMore",requestedPage<pager.optInt("totalPages",requestedPage)):items.length()>=24;
    runOnUiThread(()->{
     if(!keyword.equals(activeSearchKeyword))return;
@@ -182,9 +182,23 @@ public class MainActivity extends Activity {
     searchCurrentRow=new LinearLayout(this);searchCurrentRow.setOrientation(0);searchCurrentRow.setGravity(Gravity.TOP);searchCurrentRow.setPadding(dp(24),dp(8),dp(24),dp(8));
     searchGrid.addView(searchCurrentRow,new LinearLayout.LayoutParams(-1,-2));searchRowItems=0;
    }
-   addCard(searchCurrentRow,item,cardW,gap);searchRowItems++;
+   if("storytv".equals(item.optString("source")))addStorySearchCard(searchCurrentRow,item,cardW,gap);else addCard(searchCurrentRow,item,cardW,gap);searchRowItems++;
   }
  }
+ private void addStorySearchCard(LinearLayout line,JSONObject item,int width,int gap){
+   LinearLayout card=new LinearLayout(this);card.setOrientation(1);card.setFocusable(true);card.setFocusableInTouchMode(false);card.setClickable(true);card.setPadding(dp(2),dp(2),dp(2),dp(7));card.setBackground(bg(PANEL,0));card.setClipChildren(false);card.setClipToPadding(false);
+   FrameLayout posterFrame=new FrameLayout(this);posterFrame.setBackgroundColor(0xff252525);card.addView(posterFrame,new LinearLayout.LayoutParams(width,(int)(width*16f/9f)));
+   ImageView image=new ImageView(this);image.setScaleType(ImageView.ScaleType.CENTER_CROP);posterFrame.addView(image,new FrameLayout.LayoutParams(-1,-1));
+   String imageUrl=storyPoster(item);if(!imageUrl.isEmpty())Glide.with(this).load(imageUrl).override(width*2,(int)(width*32f/9f)).placeholder(new android.graphics.drawable.ColorDrawable(0xff252525)).error(new android.graphics.drawable.ColorDrawable(0xff333333)).centerCrop().dontAnimate().into(image);
+   int episodes=item.optInt("numOfEpisodes",0);if(episodes>0){TextView badge=txt(episodes+" EP",9,WHITE,true);badge.setGravity(Gravity.CENTER);badge.setPadding(dp(5),dp(3),dp(5),dp(3));badge.setBackground(bg(0xdd111111,0));FrameLayout.LayoutParams bp=new FrameLayout.LayoutParams(-2,dp(22),Gravity.RIGHT|Gravity.TOP);bp.setMargins(0,dp(5),dp(5),0);posterFrame.addView(badge,bp);}
+   TextView name=txt(item.optString("title","Untitled Drama"),12,WHITE,true);name.setMaxLines(2);name.setEllipsize(TextUtils.TruncateAt.END);name.setPadding(dp(3),dp(6),dp(3),0);card.addView(name);
+   String genre=item.optString("genre","Drama");JSONObject watch=item.optJSONObject("watchInfo");String views=watch==null?"":watch.optString("vc","");
+   String meta=genre+(views.isEmpty()?"":"  ·  "+views+" views");TextView details=txt(meta,10,MUTED,false);details.setMaxLines(1);details.setEllipsize(TextUtils.TruncateAt.END);details.setPadding(dp(3),dp(3),dp(3),0);card.addView(details);
+   card.setOnFocusChangeListener((v,focused)->{card.animate().cancel();card.animate().scaleX(focused?1.06f:1f).scaleY(focused?1.06f:1f).setDuration(100).start();card.setElevation(focused?dp(10):0);card.setBackground(bg(focused?0xff302024:PANEL,focused?RED:0));});
+   card.setOnHoverListener((v,event)->{if(event.getAction()==MotionEvent.ACTION_HOVER_ENTER&&!card.hasFocus())card.requestFocus();return false;});
+   card.setOnClickListener(v->openStoryDetail(item,item));
+   LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(width,-2);lp.rightMargin=gap;line.addView(card,lp);
+  }
  private int contentType(JSONObject raw){
   JSONObject o=merged(raw);int type=o.optInt("subjectType",o.optInt("subject_type",o.optInt("type",-1)));
   String id=id(raw),corner=o.optString("corner","").toUpperCase(),genre=o.optString("genre","").toUpperCase();
